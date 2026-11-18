@@ -1064,6 +1064,28 @@
 // =====================================================
 const W = 360;              // 競技場邏輯寬度
 const H = 680;              // 競技場邏輯高度（國王塔後面留空間，可以「沉底」下牌）
+
+// 4.1：2.5D 視角（只影響畫法，邏輯座標和碰撞完全不變）
+// 場地像往後倒的桌面：最上面（遠處）縮成 84%，最下面（近處）是原尺寸
+const TILT_TOP = 0.84;
+const TILT_K = (1 - TILT_TOP) / (2 * H);
+const PROJ_Y0 = H - (TILT_TOP * H + TILT_K * H * H);   // 場地上方空出來給遠景的高度
+function sc(y) { return TILT_TOP + (1 - TILT_TOP) * y / H; }   // 這個深度的縮放比例
+function proj(x, y) { return { x: W / 2 + (x - W / 2) * sc(y), y: PROJ_Y0 + TILT_TOP * y + TILT_K * y * y }; }
+// 反過來：畫面上的點 → 邏輯座標（點擊、滑鼠位置用）
+function unproj(sx, sy) {
+  const v = sy - PROJ_Y0;
+  if (v < 0) return { x: W / 2 + (sx - W / 2) / TILT_TOP, y: v / TILT_TOP };   // 場地上方（遠景）：一定不能下牌
+  const y = (-TILT_TOP + Math.sqrt(TILT_TOP * TILT_TOP + 4 * TILT_K * v)) / (2 * TILT_K);
+  return { x: W / 2 + (sx - W / 2) / sc(y), y };
+}
+// 把畫筆移到 (x, y) 投影後的位置並依遠近縮放（之後照原本的邏輯座標畫就好）
+function at(x, y) {
+  const p = proj(x, y), s = sc(y);
+  ctx.translate(p.x, p.y);
+  ctx.scale(s, s);
+  ctx.translate(-x, -y);
+}
 const RIVER_Y = 340;        // 河的中心線
 const RIVER_HALF = 12;      // 河寬的一半（河從 y=328 到 y=352）
 const LANES = [90, 270];    // 左右兩條路線的 x 座標（橋也在這裡）
@@ -1201,7 +1223,11 @@ const ROLE_LABEL = {
 // 取得畫面元素
 // =====================================================
 const canvas = document.getElementById('arena');
-const ctx = canvas.getContext('2d');
+let ctx = canvas.getContext('2d');   // 畫地面層時會暫時換成 gctx
+const mainCtx = ctx;
+// 地面層（草地、河、下牌區）先畫在平面的 groundCanvas，再傾斜貼到畫面上
+const groundCanvas = document.createElement('canvas');
+const gctx = groundCanvas.getContext('2d');
 const handEl = document.getElementById('hand');
 const nextEl = document.getElementById('nextCard');
 const elixirBarEl = document.getElementById('elixirBar');
@@ -1739,7 +1765,8 @@ function canDeploy(team, x, y) {
 // 把螢幕座標換算成競技場的邏輯座標
 function toArena(e) {
   const r = canvas.getBoundingClientRect();
-  return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+  // 先換成畫面上的座標，再把 2.5D 投影反算回邏輯座標
+  return unproj((e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H);
 }
 
 canvas.addEventListener('pointermove', (e) => { if (G) G.hover = toArena(e); });
@@ -1912,6 +1939,7 @@ function findUnitTarget(u, reach) {
 
 // 攻擊一個敵方單位（法師有範圍傷害：目標周圍 30 內的敵方單位都受傷）
 function attackUnit(u, e) {
+  u.atkAt = performance.now();   // 只給動畫用（揮武器）
   if (u.card.splash) {
     for (const o of G.units) {
       if (!o.dead && o.team !== u.team && dist(o, e) <= u.card.splash) damageUnit(o, u.card.dmg, false);
@@ -1932,6 +1960,7 @@ function meleeFx(u, x, y) {
 
 // 攻擊建築（塔或砲塔）（法師的範圍傷害也會打到旁邊的敵方單位）
 function attackTower(u, t) {
+  u.atkAt = performance.now();   // 只給動畫用（揮武器）
   if (t.card) {
     // 砲塔是放在 G.units 裡的建築
     if (u.card.splash) attackUnit(u, t);
@@ -1969,6 +1998,7 @@ function tryHeal(u) {
     const amount = Math.min(u.card.heal, best.maxHp - best.hp);   // 不超過血量上限
     best.hp += amount;
     u.cd = u.card.atk;
+    u.atkAt = performance.now();   // 只給動畫用（水晶發亮）
     // 綠線：讓玩家看得出在補誰
     G.effects.push({ kind: 'heal', src: u, dst: best, t: 0.5, max: 0.5 });
     G.effects.push({ kind: 'num', x: best.x, y: best.y - 18, text: '+' + Math.round(amount), color: '#6dff9a', t: 0.8, max: 0.8 });
@@ -2128,6 +2158,8 @@ function updateTower(t, dt) {
     G.effects.push({ kind: 'arrow', x1: t.x, y1: t.y - 20, x2: best.x, y2: best.y - (best.card.air ? 10 : 0), t: 0.18, max: 0.18 });
     damageUnit(best, t.dmg, true);
     t.cd = t.atk;
+    t.atkAt = performance.now();                       // 只給動畫用（拉弓、弩砲）
+    t.aim = Math.atan2(best.y - t.y, best.x - t.x);
     sfx('arrow');
   }
 }
@@ -2153,6 +2185,10 @@ function damageTower(t, dmg) {
     const team = t.team === 'me' ? COLOR.me : COLOR.enemy;
     for (let i = 0; i < 18; i++) {
       emitChunk(t.x + randRange(-14, 14), t.y + randRange(-14, 8), i % 4 === 0 ? team : (i % 2 ? '#d9d1c1' : '#8f887b'));
+    }
+    // 4.1：幾大塊牆面和隊伍色屋頂／旗子碎片，慢慢翻倒落地
+    for (let i = 0; i < 6; i++) {
+      emitChunk(t.x + randRange(-12, 12), t.y + randRange(-18, 0), i < 2 ? team : (i % 2 ? '#cfc6b4' : '#a39a88'), true);
     }
     emit(t.x, t.y, 30, { color: '#a59d8e', speed: 130, life: 0.9, size: 4, gravity: 160 });
     emit(t.x, t.y, 22, { color: '#6c645a', speed: 55, life: 1.6, size: 10, up: 25 });
@@ -2506,15 +2542,15 @@ function emit(x, y, n, opt) {
 }
 
 // 塔倒塌時飛出去的石塊碎片（會旋轉、往上拋再落下，落地後停住慢慢消失）
-function emitChunk(x, y, color) {
+function emitChunk(x, y, color, big = false) {
   if (!G) return;
   const a = -Math.PI / 2 + randRange(-1.3, 1.3);
-  const sp = randRange(80, 190);
+  const sp = big ? randRange(50, 110) : randRange(80, 190);
   G.particles.push({
     x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-    life: randRange(1.1, 1.6), max: 1.6,
-    size: randRange(3, 6.5), color, gravity: 420,
-    chunk: true, rot: Math.random() * 6, vr: randRange(-12, 12),
+    life: big ? randRange(2, 2.6) : randRange(1.1, 1.6), max: big ? 2.6 : 1.6,
+    size: big ? randRange(7, 11) : randRange(3, 6.5), color, gravity: 420,
+    chunk: true, rot: Math.random() * 6, vr: big ? randRange(-5, 5) : randRange(-12, 12),
     floor: y + randRange(14, 30),     // 落到這個高度就停住
   });
 }
@@ -2908,6 +2944,96 @@ function buildBackground() {
   v.fillRect(0, 0, W, H);
 }
 
+// =====================================================
+// 4.1：場地外的景色（遠山、樹林）和場地邊緣的石牆（只畫一次）
+// =====================================================
+const surroundCanvas = document.createElement('canvas');
+const rimCanvas = document.createElement('canvas');
+
+function buildSurround() {
+  const S = BG_SCALE;
+  surroundCanvas.width = rimCanvas.width = W * S;
+  surroundCanvas.height = rimCanvas.height = H * S;
+  const c = surroundCanvas.getContext('2d');
+  c.scale(S, S);
+  const rnd = seeded(41041);
+  // 地面：越遠越亮、越偏藍（空氣感）
+  const g = c.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#8fb9c2');
+  g.addColorStop(0.06, '#4f7f5c');
+  g.addColorStop(0.3, '#2f5f39');
+  g.addColorStop(1, '#22482a');
+  c.fillStyle = g;
+  c.fillRect(0, 0, W, H);
+  // 遠山（三層，越遠越淡）
+  const hills = [['#9cc1c4', 26, 9], ['#78a69a', 34, 6], ['#5b8d6c', 44, 3]];
+  for (const [color, rMax, baseOff] of hills) {
+    c.fillStyle = color;
+    for (let x = -20; x < W + 40; x += 30 + rnd() * 20) {
+      const r = rMax * (0.6 + rnd() * 0.5);
+      c.beginPath(); c.ellipse(x, PROJ_Y0 - baseOff + 6, r, r * 0.55, 0, Math.PI, 0); c.fill();
+    }
+    c.fillRect(0, PROJ_Y0 - baseOff + 5, W, H);
+  }
+  // 樹（影子、樹幹、三團樹冠）
+  function tree(x, y, r) {
+    c.fillStyle = 'rgba(0,0,0,0.25)';
+    c.beginPath(); c.ellipse(x + r * 0.4, y + r * 0.5, r, r * 0.4, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#5a3a20';
+    c.fillRect(x - r * 0.12, y - r * 0.2, r * 0.24, r * 0.7);
+    for (const [dx, dy, k] of [[-0.45, -0.3, 0.7], [0.45, -0.3, 0.7], [0, -0.75, 0.75]]) {
+      const tg = c.createRadialGradient(x + dx * r - r * 0.2, y + dy * r - r * 0.3, 1, x + dx * r, y + dy * r, r * k);
+      tg.addColorStop(0, '#7fc35a');
+      tg.addColorStop(1, '#245a22');
+      c.fillStyle = tg;
+      c.beginPath(); c.arc(x + dx * r, y + dy * r, r * k, 0, Math.PI * 2); c.fill();
+    }
+  }
+  // 上方一排樹林
+  for (let x = -6; x < W + 10; x += 11 + rnd() * 6) tree(x, PROJ_Y0 - 2 + rnd() * 4, 7 + rnd() * 3);
+  // 兩側（場地外的斜邊）
+  for (let sy = PROJ_Y0 + 6; sy < H; sy += 13 + rnd() * 6) {
+    const ly = unproj(0, sy).y;
+    const edge = W / 2 - W / 2 * sc(ly);
+    if (edge < 5) break;
+    tree(edge - 4 - rnd() * 4, sy, 6 + rnd() * 3);
+    tree(W - edge + 4 + rnd() * 4, sy + rnd() * 6, 6 + rnd() * 3);
+  }
+
+  // --- 場地邊緣：遠處的空氣感、石牆 ---
+  const r = rimCanvas.getContext('2d');
+  r.scale(S, S);
+  const TL = proj(0, 0), TR = proj(W, 0), BR = proj(W, H), BL = proj(0, H);
+  // 遠處空氣感：場地上半部蓋一層淡淡的藍白
+  r.save();
+  r.beginPath(); r.moveTo(TL.x, TL.y); r.lineTo(TR.x, TR.y); r.lineTo(BR.x, BR.y); r.lineTo(BL.x, BL.y); r.closePath();
+  r.clip();
+  const haze = r.createLinearGradient(0, TL.y, 0, proj(0, H * 0.45).y);
+  haze.addColorStop(0, 'rgba(200,225,255,0.22)');
+  haze.addColorStop(1, 'rgba(200,225,255,0)');
+  r.fillStyle = haze;
+  r.fillRect(0, 0, W, H);
+  r.restore();
+  // 石牆（左、上、右三邊）
+  r.lineJoin = 'round';
+  r.lineCap = 'round';
+  const path = () => { r.beginPath(); r.moveTo(BL.x, BL.y + 2); r.lineTo(TL.x, TL.y); r.lineTo(TR.x, TR.y); r.lineTo(BR.x, BR.y + 2); };
+  path(); r.strokeStyle = 'rgba(0,0,0,0.35)'; r.lineWidth = 9; r.stroke();
+  path(); r.strokeStyle = '#6d6455'; r.lineWidth = 6.5; r.stroke();
+  path(); r.strokeStyle = '#b2a893'; r.lineWidth = 4; r.stroke();
+  // 石塊分隔
+  r.strokeStyle = 'rgba(60,50,35,0.55)';
+  r.lineWidth = 0.7;
+  for (const [A, B] of [[BL, TL], [TL, TR], [TR, BR]]) {
+    const len = Math.hypot(B.x - A.x, B.y - A.y);
+    const nx = -(B.y - A.y) / len, ny = (B.x - A.x) / len;
+    for (let dd = 5; dd < len; dd += 9) {
+      const x = A.x + (B.x - A.x) * dd / len, y = A.y + (B.y - A.y) * dd / len;
+      r.beginPath(); r.moveTo(x - nx * 2, y - ny * 2); r.lineTo(x + nx * 2, y + ny * 2); r.stroke();
+    }
+  }
+}
+
 // 不能下牌區域的紅色斜線花紋
 let stripePattern = null;
 function getStripePattern() {
@@ -3101,7 +3227,18 @@ function drawDeployPreview() {
     ctx.beginPath();
     ctx.ellipse(x + off, y + 6, 11, 5, 0, 0, Math.PI * 2);
     ctx.fill();
-    emoji(c.emoji, x + off, y - 3, 17);
+    const id = G.hand[G.selected];
+    if (SPRITES[id]) {
+      // 4.1：預覽用自己畫的角色
+      const k = c.count === 3 ? 0.85 : 0.95;
+      ctx.save();
+      ctx.translate(x + off, y + 6);
+      ctx.scale(k, k);
+      drawSprite(id, pal('me', false), { walk: 0, atk: 0, swing: 0, t: performance.now() / 1000, seed: 0 });
+      ctx.restore();
+    } else {
+      emoji(c.emoji, x + off, y - 3, 17);
+    }
   }
   ctx.globalAlpha = 1;
   if (!ok) outlinedText('✕', x, y - 24, 18, '#ff5050');
@@ -3126,14 +3263,12 @@ function drawHpBar(x, y, w, h, ratio, color, label) {
 }
 
 function drawTower(t) {
-  const king = t.type === 'king';
-  const s = king ? 50 : 42;
   const now = performance.now();
   if (!t.alive) {
-    // 剛倒下的 0.45 秒：塔身往下塌陷、變扁、淡出，碎石慢慢出現
+    // 剛倒下的 0.45 秒：塔身往下塌陷、變扁、淡出，廢墟慢慢出現
     const k = t.fellAt ? Math.min(1, (now - t.fellAt) / 450) : 1;
     if (k < 1) {
-      const baseY = t.y + s / 2;
+      const baseY = t.y + 20;
       ctx.save();
       ctx.globalAlpha = 1 - k;
       ctx.translate(t.x, baseY);
@@ -3142,23 +3277,7 @@ function drawTower(t) {
       drawTowerBody(t, now, false);
       ctx.restore();
     }
-    // 已摧毀：一堆碎石，偶爾冒煙
-    ctx.save();
-    ctx.globalAlpha = k;
-    const stones = [[-11, 6, 9], [9, 8, 8], [0, -4, 10], [-7, -11, 6], [13, -6, 6], [4, 12, 5], [-15, -2, 4], [16, 5, 4]];
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.beginPath(); ctx.ellipse(t.x + 3, t.y + 10, s / 2 + 2, 9, 0, 0, Math.PI * 2); ctx.fill();
-    for (const [dx, dy, r] of stones) {
-      const g = ctx.createLinearGradient(0, t.y + dy - r, 0, t.y + dy + r);
-      g.addColorStop(0, '#a8a195');
-      g.addColorStop(1, '#5d5850');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(t.x + dx, t.y + dy, r, 0, Math.PI * 2); ctx.fill();
-    }
-    // 倒下的隊伍色旗子
-    ctx.fillStyle = t.team === 'me' ? COLOR.meDark : COLOR.enemyDark;
-    ctx.fillRect(t.x + 6, t.y - 2, 10, 4);
-    ctx.restore();
+    drawRuin(t, k);
     if (G.started && Math.random() < 0.04) emit(t.x + randRange(-8, 8), t.y - 4, 1, { color: '#6e6a64', speed: 6, life: 1.4, size: 6, up: 14 });
     return;
   }
@@ -3175,107 +3294,386 @@ function drawTower(t) {
   ctx.restore();
 }
 
+// 石牆上的磚縫（在 clip 範圍內畫一排一排錯開的磚）
+function brickLines(x, y, w, h, rowH, brickW, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 0.7;
+  let row = 0;
+  for (let yy = y + rowH; yy < y + h; yy += rowH, row++) {
+    ctx.beginPath(); ctx.moveTo(x, yy); ctx.lineTo(x + w, yy); ctx.stroke();
+    const off = row % 2 ? brickW / 2 : 0;
+    for (let xx = x + off; xx < x + w; xx += brickW) {
+      ctx.beginPath(); ctx.moveTo(xx, yy - rowH); ctx.lineTo(xx, yy); ctx.stroke();
+    }
+  }
+}
+
+// 城垛的一個凸塊（有亮面和暗面）
+function merlon(x, y, w, h) {
+  ctx.fillStyle = '#8f8676';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = '#ece6d8';
+  ctx.fillRect(x, y, w - 1.2, h - 1.2);
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillRect(x, y, w - 1.2, 0.9);
+}
+
+// 塔上的弓箭手（射箭時弓弦拉滿再放開）
+function drawArcher(P, x, y, dir, now, atkAt) {
+  const el = now - (atkAt || -1e9);
+  const pull = el < 140 ? 0 : Math.min(1, (el - 140) / 380);   // 剛放箭弦是直的，之後慢慢拉滿
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(dir, 1);
+  // 斗篷
+  sPoly([[-3.2, -12], [3.2, -12], [4.6, 0], [-4.6, 0]], P.team, P);
+  ctx.fillStyle = P.teamDark;
+  ctx.fillRect(-0.6, -11, 1.4, 11);
+  // 兜帽和臉
+  sCircle(0, -14.6, 3.5, P.teamDark, P);
+  sCircle(1.1, -14.2, 2.2, P.skin, P);
+  ctx.fillStyle = P.dark;
+  ctx.fillRect(2.1, -14.6, 0.9, 1);
+  // 弓
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = P.ol;
+  ctx.lineWidth = 2.4;
+  ctx.beginPath(); ctx.arc(3.2, -8.5, 5.4, -1.15, 1.15); ctx.stroke();
+  ctx.strokeStyle = P.wood;
+  ctx.lineWidth = 1.3;
+  ctx.beginPath(); ctx.arc(3.2, -8.5, 5.4, -1.15, 1.15); ctx.stroke();
+  const ex = 3.2 + Math.cos(1.15) * 5.4;
+  const ey = Math.sin(1.15) * 5.4;
+  const px = ex - 4.5 * pull;
+  ctx.strokeStyle = P.white;
+  ctx.lineWidth = 0.6;
+  ctx.beginPath(); ctx.moveTo(ex, -8.5 - ey); ctx.lineTo(px, -8.5); ctx.lineTo(ex, -8.5 + ey); ctx.stroke();
+  if (pull > 0.15) {
+    sLimb(px, -8.5, px + 9, -8.5, 0.8, P.wood, P);
+    ctx.fillStyle = P.metalLight;
+    ctx.beginPath(); ctx.moveTo(px + 11, -8.5); ctx.lineTo(px + 8.6, -9.8); ctx.lineTo(px + 8.6, -7.2); ctx.closePath(); ctx.fill();
+  }
+  // 拉弦的手
+  sCircle(px, -8.5, 1.1, P.skin, P);
+  ctx.restore();
+}
+
+// 國王塔上的指揮官（戴王冠、披斗篷）
+function drawCommander(P, x, y) {
+  ctx.save();
+  ctx.translate(x, y);
+  sPoly([[-4.5, -12], [4.5, -12], [6, 0], [-6, 0]], P.team, P);           // 斗篷
+  sRect(-2.6, -12, 5.2, 9, 1.5, P.gold, P);                                // 胸甲
+  sCircle(0, -15, 3.4, P.skin, P);
+  sPoly([[-1.8, -14], [1.8, -14], [1.2, -11], [-1.2, -11]], P.white, P);   // 鬍子
+  // 王冠
+  sPoly([[-3.2, -17.2], [-3.2, -20.6], [-1.6, -18.8], [0, -21.6], [1.6, -18.8], [3.2, -20.6], [3.2, -17.2]], P.gold, P);
+  ctx.fillStyle = P.dark;
+  ctx.fillRect(-1.6, -15.6, 0.9, 1);
+  ctx.fillRect(0.9, -15.6, 0.9, 1);
+  ctx.restore();
+}
+
+// 國王塔前方的弩砲（會轉向目標，發射時弓弦放開）
+function drawBallista(P, x, y, aim, now, atkAt) {
+  const el = now - (atkAt || -1e9);
+  const pull = el < 140 ? 0 : Math.min(1, (el - 140) / 500);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(aim);
+  sRect(-7, -1.8, 15, 3.6, 1.2, P.wood, P);              // 弩身
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = P.ol;
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(2.5, 0, 7.5, -1.2, 1.2); ctx.stroke();
+  ctx.strokeStyle = P.metal;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.arc(2.5, 0, 7.5, -1.2, 1.2); ctx.stroke();
+  const ex = 2.5 + Math.cos(1.2) * 7.5;
+  const ey = Math.sin(1.2) * 7.5;
+  const sx = ex - 7 * pull;
+  ctx.strokeStyle = P.white;
+  ctx.lineWidth = 0.7;
+  ctx.beginPath(); ctx.moveTo(ex, -ey); ctx.lineTo(sx, 0); ctx.lineTo(ex, ey); ctx.stroke();
+  if (pull > 0.2) {
+    sLimb(sx, 0, sx + 12, 0, 1, P.woodDark, P);
+    ctx.fillStyle = P.metalLight;
+    ctx.beginPath(); ctx.moveTo(sx + 14.5, 0); ctx.lineTo(sx + 11.5, -1.8); ctx.lineTo(sx + 11.5, 1.8); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+
 // 畫一座完整的塔（showBar：要不要畫血條）
 function drawTowerBody(t, now, showBar) {
   const isMe = t.team === 'me';
   const king = t.type === 'king';
-  const s = king ? 50 : 42;
-  const h = s / 2;
-  const main = isMe ? COLOR.me : COLOR.enemy;
-  const dark = isMe ? COLOR.meDark : COLOR.enemyDark;
-  const frontH = 12;        // 正面（立體感）的高度
-  const top = t.y - h - 4;  // 塔頂面上緣
-
-  // 陰影
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath(); ctx.ellipse(t.x + 5, t.y + h + 2, h + 4, 7, 0, 0, Math.PI * 2); ctx.fill();
-  // 正面（較暗的石牆）
-  const fg = ctx.createLinearGradient(0, t.y + h - frontH, 0, t.y + h + 2);
-  fg.addColorStop(0, '#a09989');
-  fg.addColorStop(1, '#6b655b');
-  ctx.fillStyle = fg;
-  rr(ctx, t.x - h, t.y + h - frontH, s, frontH + 2, 4);
-  ctx.fill();
-  // 頂面（較亮的石板）
-  const tg = ctx.createLinearGradient(0, top, 0, t.y + h - frontH);
-  tg.addColorStop(0, '#f3eee2');
-  tg.addColorStop(1, '#d0c8b8');
-  ctx.fillStyle = tg;
-  rr(ctx, t.x - h, top, s, s - frontH + 4, 5);
-  ctx.fill();
-  // 石磚縫
-  ctx.strokeStyle = 'rgba(80,70,55,0.18)';
-  ctx.lineWidth = 0.8;
-  for (let ly = top + 14; ly < t.y + h - frontH; ly += 8) {
-    ctx.beginPath(); ctx.moveTo(t.x - h + 3, ly); ctx.lineTo(t.x + h - 3, ly); ctx.stroke();
-  }
-  // 正面的石磚
-  ctx.strokeStyle = 'rgba(0,0,0,0.2)';
-  for (let lx = t.x - h + 8; lx < t.x + h; lx += 9) {
-    ctx.beginPath(); ctx.moveTo(lx, t.y + h - frontH + 1); ctx.lineTo(lx, t.y + h + 1); ctx.stroke();
-  }
-  // 血量變少時出現裂痕（60% 以下一條、30% 以下更多）
+  const P = pal(t.team, false);
+  const cx = t.x;
   const ratio = t.hp / t.maxHp;
-  if (ratio < 0.6) {
-    ctx.strokeStyle = 'rgba(50,40,30,0.65)';
-    ctx.lineWidth = 1.1;
-    const cracks = [[[-h + 4, top + 12], [-h + 10, top + 18], [-h + 7, top + 25], [-h + 13, t.y + h - 2]]];
-    if (ratio < 0.3) {
-      cracks.push([[h - 5, top + 10], [h - 11, top + 17], [h - 8, top + 23]]);
-      cracks.push([[2, t.y + h - frontH], [5, t.y + h - 6], [1, t.y + h + 1]]);
-    }
-    for (const line of cracks) {
-      ctx.beginPath();
-      line.forEach(([dx, y], i) => (i ? ctx.lineTo(t.x + dx, y) : ctx.moveTo(t.x + dx, y)));
-      ctx.stroke();
-    }
-  }
-  // 城垛（隊伍顏色）
-  ctx.fillStyle = dark;
-  rr(ctx, t.x - h - 2, top - 1, s + 4, 11, 3);
-  ctx.fill();
-  ctx.fillStyle = main;
-  rr(ctx, t.x - h - 2, top - 2, s + 4, 9, 3);
-  ctx.fill();
-  const n = king ? 5 : 4;
-  const cw = (s + 4) / (n * 2 - 1);
-  for (let i = 0; i < n; i++) {
-    const cx = t.x - h - 2 + i * cw * 2;
-    ctx.fillStyle = dark;
-    ctx.fillRect(cx, top - 7, cw, 6);
-    ctx.fillStyle = main;
-    ctx.fillRect(cx, top - 8, cw, 5);
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.fillRect(cx, top - 8, cw, 1.2);
-  }
-  // 旗子（會飄）
-  const px = t.x + h - 4;
-  const py = top - 8;
-  ctx.strokeStyle = '#3b2a18';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - 16); ctx.stroke();
-  const wave = Math.sin(now / 220 + t.x) * 2;
-  ctx.fillStyle = main;
-  ctx.beginPath();
-  ctx.moveTo(px, py - 16);
-  ctx.quadraticCurveTo(px + 6, py - 16 + wave, px + 12, py - 13);
-  ctx.lineTo(px, py - 9);
-  ctx.closePath();
-  ctx.fill();
-  // 塔上的人物
-  emoji(king ? '🤴' : '👸', t.x, t.y + 1, king ? 23 : 19);
-  // 被打到時閃白光
-  if (now < t.flashUntil) {
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    rr(ctx, t.x - h - 2, top - 8, s + 4, s + 12, 5);
+  // 預設朝向敵方；開火後朝向目標
+  const aim = t.aim !== undefined ? t.aim : (isMe ? -Math.PI / 2 : Math.PI / 2);
+  const faceDir = Math.cos(aim) < -0.1 ? -1 : 1;
+
+  if (!king) {
+    // ---------- 公主塔：圓形石塔＋上方平台的弓箭手 ----------
+    const R = 17, ry = 6;
+    const topY = t.y - 10;
+    const base = t.y + 16;
+    // 影子
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(cx + 5, base + 2, R + 5, 7, 0, 0, Math.PI * 2); ctx.fill();
+    // 圓柱形牆面（左亮右暗）
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx - R, topY);
+    ctx.lineTo(cx - R, base);
+    ctx.ellipse(cx, base, R, ry, 0, Math.PI, 0, true);
+    ctx.lineTo(cx + R, topY);
+    ctx.closePath();
+    const wg = ctx.createLinearGradient(cx - R, 0, cx + R, 0);
+    wg.addColorStop(0, '#d6cebd');
+    wg.addColorStop(0.35, '#e4ddcd');
+    wg.addColorStop(1, '#8a8272');
+    ctx.fillStyle = wg;
     ctx.fill();
+    ctx.clip();
+    brickLines(cx - R, topY, R * 2, base - topY + ry, 5, 7, 'rgba(70,60,45,0.3)');
+    // 門（拱形木門）
+    ctx.fillStyle = '#3f2a1a';
+    ctx.beginPath();
+    ctx.moveTo(cx - 4, base + 5);
+    ctx.lineTo(cx - 4, base - 4);
+    ctx.arc(cx, base - 4, 4, Math.PI, 0);
+    ctx.lineTo(cx + 4, base + 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,220,170,0.18)';
+    ctx.lineWidth = 0.6;
+    for (const dx of [-1.5, 1.5]) { ctx.beginPath(); ctx.moveTo(cx + dx, base - 6); ctx.lineTo(cx + dx, base + 4); ctx.stroke(); }
+    // 箭孔
+    ctx.fillStyle = '#2b2219';
+    ctx.fillRect(cx - 0.9, topY + 7, 1.8, 5);
+    ctx.restore();
+    // 牆的輪廓線
+    ctx.strokeStyle = 'rgba(40,32,22,0.55)';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(cx - R, topY); ctx.lineTo(cx - R, base);
+    ctx.ellipse(cx, base, R, ry, 0, Math.PI, 0, true);
+    ctx.lineTo(cx + R, topY);
+    ctx.stroke();
+    // 兩側掛的隊伍色旗幟
+    for (const s of [-1, 1]) {
+      const bx = cx + s * 9;
+      sPoly([[bx - 3, topY + 3], [bx + 3, topY + 3], [bx + 3, topY + 15], [bx, topY + 12.5], [bx - 3, topY + 15]], P.team, P);
+      ctx.fillStyle = P.gold;
+      ctx.beginPath(); ctx.arc(bx, topY + 8, 1.3, 0, Math.PI * 2); ctx.fill();
+    }
+    // 血量低時的裂痕
+    drawCracks(ratio, cx, topY + 4, base, R);
+    // 平台：後方城垛 → 地板 → 弓箭手 → 前方城垛
+    for (let k = 0; k <= 4; k++) {
+      const th = Math.PI + Math.PI * (k + 0.5) / 5;
+      merlon(cx + Math.cos(th) * (R - 1) - 2, topY + Math.sin(th) * ry - 4, 4, 4);
+    }
+    ctx.fillStyle = '#efe8d9';
+    ctx.beginPath(); ctx.ellipse(cx, topY, R + 1.5, ry + 0.8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,32,22,0.5)';
+    ctx.lineWidth = 0.9;
+    ctx.stroke();
+    ctx.fillStyle = '#cbc1ad';
+    ctx.beginPath(); ctx.ellipse(cx, topY, R - 2.5, ry - 1.8, 0, 0, Math.PI * 2); ctx.fill();
+    drawArcher(P, cx, topY + 2, faceDir, now, t.atkAt);
+    for (let k = 0; k <= 5; k++) {
+      const th = Math.PI * (k + 0.5) / 6;
+      merlon(cx + Math.cos(th) * (R + 0.5) - 2.3, topY + Math.sin(th) * (ry + 0.5) - 4.5, 4.6, 5);
+    }
+    if (now < t.flashUntil) {
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      rr(ctx, cx - R - 2, topY - 18, R * 2 + 4, base - topY + 24, 6);
+      ctx.fill();
+    }
+  } else {
+    // ---------- 國王塔：方形城堡＋兩側圓塔＋指揮官與弩砲 ----------
+    const hw = 22;
+    const wallTop = t.y - 8;
+    const base = t.y + 20;
+    const deck = 12;   // 平台頂面的深度
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(cx + 6, base + 2, hw + 9, 8, 0, 0, Math.PI * 2); ctx.fill();
+    // 正面牆
+    ctx.save();
+    rr(ctx, cx - hw, wallTop, hw * 2, base - wallTop, 2);
+    const fg = ctx.createLinearGradient(0, wallTop, 0, base);
+    fg.addColorStop(0, '#d9d1c0');
+    fg.addColorStop(1, '#948b7a');
+    ctx.fillStyle = fg;
+    ctx.fill();
+    ctx.clip();
+    brickLines(cx - hw, wallTop, hw * 2, base - wallTop, 5, 8, 'rgba(70,60,45,0.3)');
+    // 城門＋鐵柵
+    ctx.fillStyle = '#2f2116';
+    ctx.beginPath();
+    ctx.moveTo(cx - 6, base + 1);
+    ctx.lineTo(cx - 6, base - 7);
+    ctx.arc(cx, base - 7, 6, Math.PI, 0);
+    ctx.lineTo(cx + 6, base + 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#7d8590';
+    ctx.lineWidth = 0.8;
+    for (let gx = cx - 4.5; gx <= cx + 4.5; gx += 3) { ctx.beginPath(); ctx.moveTo(gx, base - 12); ctx.lineTo(gx, base); ctx.stroke(); }
+    for (let gy = base - 9; gy < base; gy += 3) { ctx.beginPath(); ctx.moveTo(cx - 6, gy); ctx.lineTo(cx + 6, gy); ctx.stroke(); }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(40,32,22,0.55)';
+    ctx.lineWidth = 0.9;
+    rr(ctx, cx - hw, wallTop, hw * 2, base - wallTop, 2);
+    ctx.stroke();
+    // 中央的大旗（王冠圖案）
+    sPoly([[cx - 5.5, wallTop + 2], [cx + 5.5, wallTop + 2], [cx + 5.5, wallTop + 14], [cx, wallTop + 11], [cx - 5.5, wallTop + 14]], P.team, P);
+    ctx.fillStyle = P.gold;
+    ctx.beginPath();
+    ctx.moveTo(cx - 3, wallTop + 8); ctx.lineTo(cx - 3, wallTop + 4.5); ctx.lineTo(cx - 1.5, wallTop + 6);
+    ctx.lineTo(cx, wallTop + 4); ctx.lineTo(cx + 1.5, wallTop + 6); ctx.lineTo(cx + 3, wallTop + 4.5); ctx.lineTo(cx + 3, wallTop + 8);
+    ctx.closePath(); ctx.fill();
+    drawCracks(ratio, cx, wallTop + 2, base, hw);
+    // 平台頂面（從上面看得到）＋後方城垛
+    ctx.fillStyle = '#ede6d7';
+    ctx.fillRect(cx - hw, wallTop - deck, hw * 2, deck);
+    ctx.fillStyle = '#cfc5b1';
+    ctx.fillRect(cx - hw + 3, wallTop - deck + 3, hw * 2 - 6, deck - 4);
+    for (let k = 0; k < 6; k++) merlon(cx - hw + 1 + k * 7.6, wallTop - deck - 4, 4.4, 4);
+    // 指揮官＋弩砲
+    drawCommander(P, cx - 9, wallTop - 1);
+    drawBallista(P, cx + 4, wallTop - 6, aim, now, t.atkAt);
+    // 前方城垛
+    for (let k = 0; k < 7; k++) merlon(cx - hw + k * 6.9, wallTop - 4.5, 4.6, 5);
+    // 兩側的圓塔（錐形屋頂、小旗子）
+    for (const s of [-1, 1]) {
+      const tx = cx + s * hw;
+      const tr = 6.5;
+      const tTop = wallTop - 14;
+      ctx.beginPath();
+      ctx.moveTo(tx - tr, tTop); ctx.lineTo(tx - tr, base);
+      ctx.ellipse(tx, base, tr, 2.5, 0, Math.PI, 0, true);
+      ctx.lineTo(tx + tr, tTop);
+      ctx.closePath();
+      const tg = ctx.createLinearGradient(tx - tr, 0, tx + tr, 0);
+      tg.addColorStop(0, '#e2dbcb');
+      tg.addColorStop(1, '#8a8272');
+      ctx.fillStyle = tg;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(40,32,22,0.55)';
+      ctx.lineWidth = 0.9;
+      ctx.stroke();
+      ctx.fillStyle = '#2b2219';
+      ctx.fillRect(tx - 0.8, tTop + 7, 1.6, 4);
+      // 錐形屋頂（隊伍色，左亮右暗）
+      const rg = ctx.createLinearGradient(tx - tr, 0, tx + tr, 0);
+      rg.addColorStop(0, P.teamLight);
+      rg.addColorStop(0.45, P.team);
+      rg.addColorStop(1, P.teamDark);
+      ctx.fillStyle = rg;
+      ctx.beginPath();
+      ctx.moveTo(tx - tr - 1.5, tTop + 1);
+      ctx.lineTo(tx, tTop - 15);
+      ctx.lineTo(tx + tr + 1.5, tTop + 1);
+      ctx.quadraticCurveTo(tx, tTop + 3.5, tx - tr - 1.5, tTop + 1);
+      ctx.fill();
+      ctx.strokeStyle = P.ol;
+      ctx.stroke();
+      // 小旗子（會飄）
+      const wave = Math.sin(now / 220 + tx) * 1.5;
+      ctx.strokeStyle = '#3b2a18';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(tx, tTop - 15); ctx.lineTo(tx, tTop - 21); ctx.stroke();
+      ctx.fillStyle = P.team;
+      ctx.beginPath();
+      ctx.moveTo(tx, tTop - 21);
+      ctx.quadraticCurveTo(tx + 3.5, tTop - 21 + wave, tx + 7, tTop - 19.5);
+      ctx.lineTo(tx, tTop - 17.5);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if (now < t.flashUntil) {
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      rr(ctx, cx - hw - 8, wallTop - deck - 8, hw * 2 + 16, base - wallTop + deck + 10, 6);
+      ctx.fill();
+    }
   }
   if (!showBar) return;
-  // 血條（塔上方，中間寫數字）
+  // 血條（位置和第 4 版相同：塔上方，中間寫數字）
+  const s = king ? 50 : 42;
+  const top = t.y - s / 2 - 4;
   const barW = s + 12;
   const barY = top - (king ? 28 : 20);
   if (king) emoji('👑', t.x, barY - 9, 13);
   drawHpBar(t.x, barY, barW, 9, ratio, isMe ? COLOR.meBar : COLOR.enemyBar, Math.ceil(t.hp));
+}
+
+// 血量變少時牆上出現裂痕（60% 以下一條、30% 以下更多）
+function drawCracks(ratio, cx, top, base, half) {
+  if (ratio >= 0.6) return;
+  ctx.strokeStyle = 'rgba(45,35,25,0.7)';
+  ctx.lineWidth = 1.1;
+  const lines = [[[-half + 4, top + 2], [-half + 9, top + 8], [-half + 6, top + 14], [-half + 11, base - 3]]];
+  if (ratio < 0.3) {
+    lines.push([[half - 4, top + 1], [half - 10, top + 7], [half - 7, top + 13]]);
+    lines.push([[3, base - 12], [6, base - 7], [2, base - 1]]);
+  }
+  for (const line of lines) {
+    ctx.beginPath();
+    line.forEach(([dx, y], i) => (i ? ctx.lineTo(cx + dx, y) : ctx.moveTo(cx + dx, y)));
+    ctx.stroke();
+  }
+}
+
+// 倒掉的塔：剩下一截斷牆＋碎石堆＋掉在地上的旗子
+function drawRuin(t, alpha) {
+  const king = t.type === 'king';
+  const w = king ? 46 : 34;
+  const base = t.y + (king ? 20 : 16);
+  const P = pal(t.team, false);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath(); ctx.ellipse(t.x + 4, base + 1, w / 2 + 6, 8, 0, 0, Math.PI * 2); ctx.fill();
+  // 斷牆（上緣參差不齊）
+  ctx.beginPath();
+  ctx.moveTo(t.x - w / 2, base);
+  const n = 8;
+  for (let i = 0; i <= n; i++) {
+    const x = t.x - w / 2 + i * w / n;
+    const h = 7 + ((i * 7 + (king ? 3 : 1)) % 5) * 1.6;
+    ctx.lineTo(x, base - h);
+  }
+  ctx.lineTo(t.x + w / 2, base);
+  ctx.closePath();
+  const g = ctx.createLinearGradient(t.x - w / 2, 0, t.x + w / 2, 0);
+  g.addColorStop(0, '#bdb4a2');
+  g.addColorStop(1, '#6f685c');
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(40,32,22,0.55)';
+  ctx.lineWidth = 0.9;
+  ctx.stroke();
+  // 碎石
+  const stones = [[-14, 4, 5], [12, 5, 4.5], [-4, 7, 3.5], [6, 8, 3], [-18, -2, 3], [18, 0, 3.5], [0, -2, 4]];
+  for (const [dx, dy, r] of stones) {
+    const sg = ctx.createLinearGradient(0, base + dy - r, 0, base + dy + r);
+    sg.addColorStop(0, '#b0a898');
+    sg.addColorStop(1, '#5f594f');
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(t.x + dx, base - 4 + dy, r, 0, Math.PI * 2); ctx.fill();
+  }
+  // 掉在地上的旗子
+  ctx.save();
+  ctx.translate(t.x + 8, base + 2);
+  ctx.rotate(-0.25);
+  ctx.fillStyle = P.teamDark;
+  ctx.fillRect(-5, -2, 11, 4);
+  ctx.restore();
+  ctx.restore();
 }
 
 // 畫砲塔：石頭底座＋會轉向目標的砲管
@@ -3326,26 +3724,299 @@ function drawCannon(u) {
   drawHpBar(u.x, y - 20, 26, 4, u.hp / u.maxHp, isMe ? COLOR.meBar : COLOR.enemyBar);
 }
 
-// 受擊閃白用：把 emoji 做成一張純白剪影（第一次用到時畫好存起來）
-const whiteCache = {};
-function whiteEmoji(ch, size) {
-  const key = ch + size;
-  if (whiteCache[key]) return whiteCache[key];
-  const S = 3;                       // 3 倍解析度，縮小後才清楚
-  const box = Math.ceil(size * 1.5);
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = box * S;
-  const c = cv.getContext('2d');
-  c.scale(S, S);
-  c.font = `${size}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
-  c.textAlign = 'center';
-  c.textBaseline = 'middle';
-  c.fillText(ch, box / 2, box / 2);
-  c.globalCompositeOperation = 'source-in';
-  c.fillStyle = '#fff';
-  c.fillRect(0, 0, box, box);
-  whiteCache[key] = { cv, box };
-  return whiteCache[key];
+// =====================================================
+// 4.1：自己畫的角色（取代場上的 emoji）
+// 每個角色畫在「腳底 = (0, 0)、面向右邊」的座標裡；
+// 顏色都從調色盤拿，受擊閃白時換成全白的調色盤再疊畫一次
+// =====================================================
+function unitPalette(team) {
+  const me = team === 'me';
+  return {
+    flash: false,
+    team: me ? '#3f86f0' : '#e2474d',
+    teamDark: me ? '#1d4fa6' : '#9d2229',
+    teamLight: me ? '#a6ccff' : '#ffb0ac',
+    skin: '#f2c79a',
+    metal: '#b9c2cc', metalDark: '#68727e', metalLight: '#eef2f6',
+    wood: '#8a5a32', woodDark: '#5c3a1e',
+    gold: '#f4c542', white: '#f7f4ec', dark: '#24202a',
+    bomb: '#2e2d36', shine: 'rgba(255,255,255,0.3)',
+    bat: '#3e2d52', batWing: '#5e4380',
+    hog: '#7c4b2a', hogDark: '#55301a', hogBelly: '#a87452', snout: '#d99a88',
+    orb: '#ffb347', heal: '#5fe08a', shade: 'rgba(0,0,0,0.16)',
+    ol: 'rgba(20,16,24,0.75)',
+  };
+}
+const PAL_CACHE = {};
+function pal(team, flash) {
+  const key = team + (flash ? '-flash' : '');
+  if (!PAL_CACHE[key]) {
+    const p = unitPalette(team);
+    if (flash) { for (const k in p) if (typeof p[k] === 'string') p[k] = '#ffffff'; p.flash = true; }
+    PAL_CACHE[key] = p;
+  }
+  return PAL_CACHE[key];
+}
+
+// --- 畫圖小工具（填色＋深色描邊，卡通風格） ---
+function sCircle(x, y, r, fill, P) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = 0.9; ctx.strokeStyle = P.ol; ctx.stroke();
+}
+function sEllipse(x, y, rx, ry, fill, P, rot = 0) {
+  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2);
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = 0.9; ctx.strokeStyle = P.ol; ctx.stroke();
+}
+function sPoly(pts, fill, P) {
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = 0.9; ctx.lineJoin = 'round'; ctx.strokeStyle = P.ol; ctx.stroke();
+}
+function sRect(x, y, w, h, r, fill, P) {
+  rr(ctx, x, y, w, h, r);
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = 0.9; ctx.strokeStyle = P.ol; ctx.stroke();
+}
+// 手腳、武器柄：先畫粗一點的深色線當描邊，再畫顏色
+function sLimb(x1, y1, x2, y2, w, color, P) {
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = P.ol; ctx.lineWidth = w + 1.6;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.strokeStyle = color; ctx.lineWidth = w;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+}
+// 發光（閃白時不畫）
+function glow(x, y, r, color, P) {
+  if (P.flash) return;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, color);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
+
+// 👥 小兵：圓盔、隊伍色上衣、短矛（攻擊時往前刺）
+function spMinion(P, a) {
+  const sw = a.walk * 0.6;
+  sLimb(-1, -6, -1 - Math.sin(sw) * 3, 0, 2.2, P.dark, P);
+  sLimb(1.4, -6, 1.4 + Math.sin(sw) * 3, 0, 2.2, P.dark, P);
+  sRect(-4, -12.5, 8, 7.5, 2, P.team, P);
+  ctx.fillStyle = P.woodDark;
+  ctx.fillRect(-4, -7.6, 8, 1.4);
+  sCircle(0.5, -15, 3.6, P.skin, P);
+  ctx.beginPath(); ctx.arc(0.5, -15.4, 3.9, Math.PI, 0); ctx.closePath();
+  ctx.fillStyle = P.metal; ctx.fill(); ctx.strokeStyle = P.ol; ctx.lineWidth = 0.9; ctx.stroke();
+  sEllipse(-0.6, -19.8, 1.3, 2.4, P.teamLight, P, -0.4);
+  ctx.fillStyle = P.dark;
+  ctx.fillRect(2.3, -15, 1, 1.2);
+  const th = a.swing * 4.5;
+  const hx = 3.5 + th, hy = -9.5;
+  sLimb(hx - 6, hy + 1.4, hx + 7, hy - 1.4, 1, P.wood, P);
+  sPoly([[hx + 6.6, hy - 3], [hx + 11, hy - 1.9], [hx + 7.2, hy - 0.1]], P.metalLight, P);
+  sLimb(1, -11, hx, hy, 1.8, P.team, P);
+  sCircle(hx, hy, 1.2, P.skin, P);
+}
+
+// 💣 炸彈兵：會走路的圓炸彈，隊伍色鐵環、生氣的眼睛、點著的引信
+function spBomb(P, a) {
+  const wob = a.walk;
+  sLimb(-2.6, -3, -2.6 - wob * 1.6, 0, 2, P.dark, P);
+  sLimb(2.6, -3, 2.6 + wob * 1.6, 0, 2, P.dark, P);
+  ctx.save();
+  ctx.rotate(wob * 0.08);
+  sCircle(0, -9, 7, P.bomb, P);
+  ctx.fillStyle = P.shine;
+  ctx.beginPath(); ctx.arc(-2.6, -11.6, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = P.team; ctx.lineWidth = 2.2;
+  ctx.beginPath(); ctx.ellipse(0, -7.4, 6.7, 2.2, 0, 0, Math.PI); ctx.stroke();
+  sRect(-2.2, -17.4, 4.4, 2.6, 0.8, P.metal, P);
+  ctx.fillStyle = P.white;
+  ctx.beginPath(); ctx.ellipse(1.9, -10, 1.5, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(4.8, -10, 1.3, 1.7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = P.dark;
+  ctx.beginPath(); ctx.arc(2.4, -9.8, 0.75, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(5.2, -9.8, 0.7, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = P.white === '#ffffff' && P.flash ? '#fff' : '#d8d8e0';
+  ctx.lineWidth = 0.9;
+  ctx.beginPath(); ctx.moveTo(0.4, -12.6); ctx.lineTo(3, -11.5); ctx.moveTo(3.8, -11.7); ctx.lineTo(6.2, -12.8); ctx.stroke();
+  ctx.restore();
+  // 引信＋火花
+  ctx.strokeStyle = P.woodDark; ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, -17.2); ctx.quadraticCurveTo(-1.5, -20.5, 2, -21.8); ctx.stroke();
+  if (!P.flash) {
+    const f = 0.7 + 0.3 * Math.sin(a.t * 40 + a.seed);
+    glow(2, -22, 4.5 * f, 'rgba(255,200,60,0.9)', P);
+    ctx.fillStyle = '#fff6c0';
+    ctx.beginPath(); ctx.arc(2, -22, 1.1 * f, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// 🦇 蝙蝠：深紫色身體、會拍的翅膀、隊伍色發光眼睛（攻擊時往前撲）
+function spBat(P, a) {
+  const f = Math.sin(a.t * 18 + a.seed);
+  ctx.translate(a.swing * 3, a.swing * 1);
+  for (const s of [-1, 1]) {
+    sPoly([[s * 2.4, -6], [s * 9, -10 + f * 4], [s * 10.5, -5 + f * 2.5], [s * 7.5, -4.6 + f * 1.5], [s * 5.6, -2.6], [s * 3, -3.4]], P.batWing, P);
+  }
+  sEllipse(0, -5, 3.6, 4.2, P.bat, P);
+  sPoly([[-2.7, -7.8], [-2.1, -11.6], [-0.6, -8.6]], P.bat, P);
+  sPoly([[2.7, -7.8], [2.1, -11.6], [0.6, -8.6]], P.bat, P);
+  glow(-1.2, -5.8, 2.4, P.teamLight, P);
+  glow(1.2, -5.8, 2.4, P.teamLight, P);
+  ctx.fillStyle = P.teamLight;
+  ctx.beginPath(); ctx.arc(-1.2, -5.8, 0.9, 0, Math.PI * 2); ctx.arc(1.2, -5.8, 0.9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = P.white;
+  ctx.fillRect(-0.9, -3.5, 0.6, 1);
+  ctx.fillRect(0.4, -3.5, 0.6, 1);
+}
+
+// 🧙 法師：隊伍色長袍、尖帽、白鬍子、頂端發光的法杖（施法時法杖往前、光變大）
+function spMage(P, a) {
+  const sway = a.walk * 1.2;
+  const cast = a.swing;
+  sPoly([[-3.8, -17], [3.8, -17], [6.5 + sway, 0], [-6.5 + sway, 0]], P.team, P);
+  ctx.fillStyle = P.teamDark;
+  ctx.beginPath(); ctx.moveTo(-0.8, -16); ctx.lineTo(1.6, -16); ctx.lineTo(2.6 + sway, -0.5); ctx.lineTo(-1.6 + sway, -0.5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = P.gold;
+  ctx.fillRect(-4.6, -11.6, 9.2, 1.4);
+  sCircle(0.6, -19.6, 3.3, P.skin, P);
+  sPoly([[-1.2, -19], [3.9, -19], [2.4, -13.6], [0.4, -15.4]], P.white, P);
+  ctx.fillStyle = P.dark;
+  ctx.fillRect(2.2, -20.4, 0.9, 1);
+  // 帽子
+  sEllipse(0.3, -21.6, 5.8, 1.5, P.teamDark, P);
+  sPoly([[-3.4, -21.8], [3.8, -21.8], [0.5, -26], [-4.2, -31]], P.teamDark, P);
+  ctx.fillStyle = P.gold;
+  ctx.fillRect(-3.1, -23.4, 6.5, 1.3);
+  // 法杖
+  const bx = 5.2, by = -1;
+  const tipX = 6.5 + cast * 5, tipY = -25 + cast * 2;
+  sLimb(bx, by, tipX, tipY, 1.3, P.wood, P);
+  glow(tipX, tipY - 1.6, 5 + cast * 6, 'rgba(255,170,60,0.75)', P);
+  sCircle(tipX, tipY - 1.6, 2.3, P.orb, P);
+  const hx = bx + (tipX - bx) * 0.55, hy = by + (tipY - by) * 0.55;
+  sLimb(2, -15.5, hx, hy, 1.8, P.team, P);
+  sCircle(hx, hy, 1.2, P.skin, P);
+}
+
+// 🐗 衝鋒豬：棕色野豬、鬃毛、白獠牙、背上隊伍色護甲、額頭鐵片（攻擊時往前撞）
+function spHog(P, a) {
+  const g = a.walk;
+  ctx.translate(a.swing * 4, 0);
+  const legs = [[-6, 1], [6.5, 1], [-4, -1], [8.5, -1]];
+  legs.forEach(([lx, ph], i) => {
+    const sw = g * ph * 2.6;
+    sLimb(lx, -6, lx + sw, 0, 2.3, i < 2 ? P.hogDark : P.hog, P);
+  });
+  ctx.strokeStyle = P.hogDark; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-9.6, -10); ctx.quadraticCurveTo(-13, -12, -11, -14); ctx.stroke();
+  sEllipse(0, -9, 10, 6, P.hog, P);
+  ctx.fillStyle = P.hogBelly;
+  ctx.beginPath(); ctx.ellipse(1, -5.8, 7, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+  for (let k = 0; k < 6; k++) {
+    const x = -7 + k * 2.6;
+    sPoly([[x, -13.6], [x + 1.2, -17.2 + (k % 2)], [x + 2.6, -13.8]], P.hogDark, P);
+  }
+  sRect(-6, -15.4, 10, 5.6, 2, P.team, P);
+  ctx.fillStyle = P.gold;
+  ctx.fillRect(-6, -10.8, 10, 1.2);
+  sEllipse(10, -9.5, 5.2, 4.4, P.hog, P, 0.15);
+  sPoly([[7.4, -12.4], [8.4, -16], [10.2, -13]], P.hogDark, P);
+  sPoly([[7, -13], [11.6, -14.2], [12.8, -11.6], [8.2, -11]], P.metal, P);
+  sEllipse(14.8, -8.2, 2.3, 2.1, P.snout, P);
+  ctx.fillStyle = P.dark;
+  ctx.beginPath(); ctx.arc(15.4, -8.6, 0.45, 0, Math.PI * 2); ctx.arc(15.6, -7.6, 0.45, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(11.2, -10.8, 0.9, 0, Math.PI * 2); ctx.fill();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = P.ol; ctx.lineWidth = 2.6;
+  ctx.beginPath(); ctx.moveTo(13.2, -6.3); ctx.quadraticCurveTo(15.6, -5.9, 15.9, -9.4); ctx.stroke();
+  ctx.strokeStyle = P.white; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(13.2, -6.3); ctx.quadraticCurveTo(15.6, -5.9, 15.9, -9.4); ctx.stroke();
+}
+
+// 💚 治療師：白袍、隊伍色兜帽與腰帶、頂端綠色水晶的法杖（治療時水晶發亮）
+function spHealer(P, a) {
+  const sway = a.walk;
+  const cast = a.swing;
+  sPoly([[-3.6, -16.5], [3.6, -16.5], [6 + sway, 0], [-6 + sway, 0]], P.white, P);
+  ctx.fillStyle = P.team;
+  ctx.beginPath(); ctx.moveTo(-6 + sway, -1.8); ctx.lineTo(6 + sway, -1.8); ctx.lineTo(6.2 + sway, -0.4); ctx.lineTo(-6.2 + sway, -0.4); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = P.team; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-3.2, -15.5); ctx.lineTo(3.9, -8.2); ctx.stroke();
+  sCircle(0.2, -19.3, 4.3, P.team, P);
+  sCircle(1.2, -19, 2.8, P.skin, P);
+  ctx.fillStyle = P.dark;
+  ctx.fillRect(2.4, -19.6, 0.9, 1);
+  const tipY = -24 - cast * 2;
+  sLimb(5, -1, 6, tipY + 2, 1.2, P.wood, P);
+  glow(6, tipY, 4 + cast * 6, 'rgba(110,255,160,0.8)', P);
+  sPoly([[6, tipY - 3.4], [8, tipY], [6, tipY + 3], [4, tipY]], P.heal, P);
+  sLimb(2, -14.5, 5.6, -12, 1.8, P.white, P);
+  sCircle(5.6, -12, 1.2, P.skin, P);
+}
+
+// 🛡️ 坦克：全身盔甲的騎士、隊伍色罩袍、大盾牌、狼牙棒（攻擊時從後上方揮下）
+function spTank(P, a) {
+  const w = a.walk * 0.45;
+  sLimb(-3, -8, -3 - Math.sin(w) * 2.5, 0, 3.6, P.metalDark, P);
+  sLimb(3, -8, 3 + Math.sin(w) * 2.5, 0, 3.6, P.metalDark, P);
+  sRect(-7, -21, 14, 14, 4, P.metal, P);
+  ctx.fillStyle = P.shade;
+  ctx.fillRect(1.5, -20, 5, 12);
+  sRect(-3.5, -20, 7, 12.5, 1.5, P.team, P);
+  ctx.fillStyle = P.gold;
+  ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(2, -14); ctx.lineTo(0, -11); ctx.lineTo(-2, -14); ctx.closePath(); ctx.fill();
+  sRect(-4.2, -28.6, 8.4, 8, 3, P.metal, P);
+  ctx.fillStyle = P.dark;
+  ctx.fillRect(-0.4, -25.6, 4.6, 1.3);
+  sEllipse(-1.6, -30.2, 1.6, 3, P.team, P, -0.6);
+  // 狼牙棒（平常扛在肩上，攻擊時往前揮）
+  const ang = -2.0 + Math.sin(a.atk * Math.PI) * 2.6;
+  const sx = -2.5, sy = -18;
+  const hx = sx + Math.cos(ang) * 7, hy = sy + Math.sin(ang) * 7;
+  const mx = hx + Math.cos(ang) * 6.5, my = hy + Math.sin(ang) * 6.5;
+  sLimb(sx, sy, hx, hy, 2.6, P.metal, P);
+  sLimb(hx, hy, mx, my, 1.2, P.woodDark, P);
+  for (let k = 0; k < 6; k++) {
+    const sa = k * Math.PI / 3;
+    sLimb(mx, my, mx + Math.cos(sa) * 3.6, my + Math.sin(sa) * 3.6, 0.8, P.metalDark, P);
+  }
+  sCircle(mx, my, 2.6, P.metalDark, P);
+  // 盾牌在最前面
+  sPoly([[4, -22.5], [12.5, -22.5], [12.5, -12.5], [8.2, -4.5], [4, -12.5]], P.team, P);
+  ctx.strokeStyle = P.metalLight; ctx.lineWidth = 1.3;
+  ctx.beginPath(); ctx.moveTo(4.6, -21.9); ctx.lineTo(11.9, -21.9); ctx.lineTo(11.9, -12.7); ctx.lineTo(8.2, -5.6); ctx.lineTo(4.6, -12.7); ctx.closePath(); ctx.stroke();
+  ctx.fillStyle = P.teamLight;
+  ctx.fillRect(7.6, -20, 1.4, 11);
+  ctx.fillRect(5.6, -16.4, 5.4, 1.4);
+}
+
+const SPRITES = { minions: spMinion, bomb: spBomb, bats: spBat, mage: spMage, hog: spHog, healer: spHealer, tank: spTank };
+// 每個角色的高度（血條放在頭上）
+const SPRITE_H = { minions: 22, bomb: 23, bats: 13, mage: 32, hog: 18, healer: 29, tank: 32 };
+
+function drawSprite(id, P, a) {
+  ctx.save();
+  SPRITES[id](P, a);
+  ctx.restore();
+}
+
+// 動畫參數：走路擺動、攻擊揮動（攻擊後 0.3 秒內）
+function animOf(u, moving, now) {
+  const el = now - (u.atkAt || -1e9);
+  const atk = el < 300 ? el / 300 : 0;
+  if (u.seed === undefined) u.seed = Math.random() * 10;
+  return {
+    walk: moving ? Math.sin(now / 95 + u.seed) : 0,
+    atk,
+    swing: atk > 0 ? Math.sin(atk * Math.PI) : 0,
+    t: now / 1000,
+    seed: u.seed,
+  };
 }
 
 function drawUnit(u) {
@@ -3357,200 +4028,218 @@ function drawUnit(u) {
   if (u.lx === undefined) { u.lx = u.x; u.ly = u.y; }
   const dx = u.x - u.lx;
   const moving = Math.hypot(dx, u.y - u.ly) > 0.02;
-  if (Math.abs(dx) > 0.05) u.face = dx < 0 ? 1 : -1;   // emoji 大多面向左，往右走時翻過來
+  if (Math.abs(dx) > 0.05) u.face = dx < 0 ? 1 : -1;
   u.lx = u.x; u.ly = u.y;
+  const dir = -(u.face || 1);   // 角色預設面向右；往左走時翻過來
 
   // 下場時從空中落下
   const age = now - u.born;
   const drop = age < 220 ? Math.pow(1 - age / 220, 2) * 50 : 0;
-  // 走路時上下晃
-  const bob = moving ? Math.abs(Math.sin(now / 110 + u.x)) * 2.5 : 0;
   const lift = u.card.air ? 14 + Math.sin(now / 160 + u.x) * 2 : 0;
-  const y = u.y - drop - bob - lift;
+  const y = u.y - drop - lift;
   const hurt = now < u.flashUntil;
   // 受擊時壓扁一下（落地那一刻也壓扁一下）
   const landing = age >= 220 && age < 320 ? 1 - (age - 220) / 100 : 0;
-  const squash = hurt ? 0.18 * (u.flashUntil - now) / 120 : landing * 0.2;
+  const squash = hurt ? 0.16 * (u.flashUntil - now) / 120 : landing * 0.2;
+  const h = SPRITE_H[u.id] || 22;
 
   // 影子（越高越小越淡）
   const shadowScale = 1 - Math.min(0.5, (drop + lift) / 60);
   ctx.fillStyle = `rgba(0,0,0,${0.32 * shadowScale})`;
-  ctx.beginPath(); ctx.ellipse(u.x, u.y + 7, 10 * shadowScale, 3.5 * shadowScale, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(u.x + 1.5, u.y + 6.5, (u.id === 'hog' ? 13 : 10) * shadowScale, 3.5 * shadowScale, 0, 0, Math.PI * 2); ctx.fill();
 
   // 隊伍底座（地上的圓環）
   if (!u.card.air) {
     ctx.strokeStyle = isMe ? COLOR.me : COLOR.enemy;
-    ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.ellipse(u.x, u.y + 6, 10, 4, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(u.x, u.y + 6, u.id === 'hog' ? 13 : 10, 4, 0, 0, Math.PI * 2); ctx.stroke();
   }
 
   // 炸彈兵倒扣血時外圈閃紅黃光
   if (u.draining) {
     ctx.strokeStyle = (Math.floor(now / 110) % 2) ? '#ffea00' : '#ff3000';
     ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(u.x, y - 2, 14, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(u.x, y + 6 - h / 2, 14, 0, Math.PI * 2); ctx.stroke();
   }
 
-  // 本體：emoji（加一點陰影，翻轉面向；受擊時壓扁）
-  const size = u.card.count === 3 ? 16 : 20;
+  // 本體：自己畫的角色（受擊時壓扁，並疊一層白色）
+  const a = animOf(u, moving, now);
+  const k = u.card.count === 3 ? 0.9 : 1;
   ctx.save();
-  ctx.translate(u.x, y + 4);
-  ctx.scale((u.face || 1) * (1 + squash), 1 - squash);
-  ctx.translate(0, -7);
-  ctx.shadowColor = isMe ? 'rgba(40,110,255,0.9)' : 'rgba(255,50,50,0.9)';
-  ctx.shadowBlur = 4;
-  emoji(u.card.emoji, 0, 0, size);
-  // 受擊閃白：疊一張純白剪影
+  ctx.translate(u.x, y + 6);
+  ctx.scale(dir * (1 + squash) * k, (1 - squash) * k);
+  drawSprite(u.id, pal(u.team, false), a);
   if (hurt) {
-    ctx.shadowBlur = 0;
-    const wc = whiteEmoji(u.card.emoji, size);
     ctx.globalAlpha = 0.85 * (u.flashUntil - now) / 120;
-    ctx.drawImage(wc.cv, -wc.box / 2, -wc.box / 2, wc.box, wc.box);
-    ctx.globalAlpha = 1;
+    drawSprite(u.id, pal(u.team, true), a);
   }
   ctx.restore();
 
   // 血條（受傷了才顯示）
-  if (u.hp < u.maxHp) drawHpBar(u.x, y - 19, 22, 3.5, u.hp / u.maxHp, isMe ? COLOR.meBar : COLOR.enemyBar);
+  if (u.hp < u.maxHp) drawHpBar(u.x, y + 6 - h * k - 6, 22, 3.5, u.hp / u.maxHp, isMe ? COLOR.meBar : COLOR.enemyBar);
 }
 
-function drawEffects() {
+// =====================================================
+// 特效：地面上的（衝擊波、範圍圈、爆炸）跟著地面一起傾斜；
+// 立起來的（箭、火球、數字、文字）畫在投影後的位置並依遠近縮放
+// =====================================================
+const GROUND_FX = new Set(['ring', 'spawn', 'splash', 'boom']);
+
+function drawEffects(layer) {
   for (const e of G.effects) {
-    const a = e.t / e.max;   // 1 → 0
-    const p = 1 - a;         // 0 → 1（飛行進度）
-    if (e.kind === 'arrow') {
-      // 塔的箭：有箭頭的線，沿弧線飛向目標
-      const x = e.x1 + (e.x2 - e.x1) * p;
-      const y = e.y1 + (e.y2 - e.y1) * p - Math.sin(p * Math.PI) * 14;
-      const ang = Math.atan2(e.y2 - e.y1 - Math.cos(p * Math.PI) * 14 * Math.PI, e.x2 - e.x1);
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(ang);
-      ctx.strokeStyle = '#5a3a1a';
-      ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(3, 0); ctx.stroke();
-      ctx.fillStyle = '#ddd';
-      ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(1, -2.5); ctx.lineTo(1, 2.5); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(-10, -1.8, 3, 1.2);
-      ctx.fillRect(-10, 0.6, 3, 1.2);
-      ctx.restore();
-    } else if (e.kind === 'ball') {
-      // 砲彈
-      const x = e.x1 + (e.x2 - e.x1) * p;
-      const y = e.y1 + (e.y2 - e.y1) * p;
-      ctx.fillStyle = '#1a1a1a';
-      ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
-    } else if (e.kind === 'orb') {
-      // 法師的火球（發光）
-      const x = e.x1 + (e.x2 - e.x1) * p;
-      const y = e.y1 + (e.y2 - e.y1) * p;
-      const g = ctx.createRadialGradient(x, y, 0, x, y, 10);
-      g.addColorStop(0, 'rgba(255,255,255,1)');
-      g.addColorStop(0.3, 'rgba(255,190,90,0.95)');
-      g.addColorStop(1, 'rgba(255,90,30,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
-    } else if (e.kind === 'heal') {
-      // 治療綠線（跟著兩個單位的位置畫）
-      ctx.save();
-      ctx.globalAlpha = a;
-      ctx.strokeStyle = '#3dff7a';
-      ctx.shadowColor = '#3dff7a';
-      ctx.shadowBlur = 6;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.moveTo(e.src.x, e.src.y - 4);
-      ctx.lineTo(e.dst.x, e.dst.y - 4);
-      ctx.stroke();
-      ctx.restore();
-    } else if (e.kind === 'splash') {
-      // 法師的範圍傷害圈
-      ctx.fillStyle = `rgba(255,140,40,${a * 0.3})`;
-      ctx.strokeStyle = `rgba(255,200,120,${a})`;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.arc(e.x, e.y, 30 * (0.6 + p * 0.4), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    } else if (e.kind === 'boom') {
-      // 爆炸：外圈火光＋內圈白光
-      const r = BOMB.radius * (0.5 + p * 0.8);
-      const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, r);
-      g.addColorStop(0, `rgba(255,255,220,${a})`);
-      g.addColorStop(0.4, `rgba(255,170,50,${a * 0.9})`);
-      g.addColorStop(1, 'rgba(200,60,20,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.fill();
-    } else if (e.kind === 'spawn') {
-      // 下牌時的擴散圈
-      ctx.strokeStyle = e.color;
-      ctx.globalAlpha = a;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.ellipse(e.x, e.y + 6, 8 + p * 26, (8 + p * 26) * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
-      ctx.globalAlpha = 1;
-    } else if (e.kind === 'ring') {
-      // 衝擊波（下牌落地、單位陣亡、塔倒塌）：扁圓環往外擴散
-      const r = e.r0 + (e.r1 - e.r0) * (1 - a * a);
-      ctx.strokeStyle = e.color;
-      ctx.globalAlpha = a;
-      ctx.lineWidth = e.width * (0.4 + a * 0.6);
-      ctx.beginPath(); ctx.ellipse(e.x, e.y, r, r * 0.5, 0, 0, Math.PI * 2); ctx.stroke();
-      ctx.globalAlpha = 1;
-    } else if (e.kind === 'pillar') {
-      // 下牌時的一道隊伍色光柱
-      const g = ctx.createLinearGradient(0, e.y - 50, 0, e.y + 6);
-      g.addColorStop(0, 'rgba(255,255,255,0)');
-      g.addColorStop(1, e.color);
-      ctx.globalAlpha = a * 0.55;
-      ctx.fillStyle = g;
-      const w = 14 * (0.5 + a * 0.5);
-      ctx.fillRect(e.x - w / 2, e.y - 50, w, 56);
-      ctx.globalAlpha = 1;
-    } else if (e.kind === 'deny') {
-      // 點到不能下的地方：紅色 ✕ 彈一下
-      ctx.globalAlpha = a;
-      outlinedText('✕', e.x, e.y - p * 6, 20 + (1 - a) * 6, '#ff5a5f');
-      ctx.globalAlpha = 1;
-    } else if (e.kind === 'counter') {
-      // 剋制成功：金色大字彈出，下方小字寫誰剋誰
-      const pop = Math.min(1, p * 6);
-      const size = 20 * (0.6 + pop * 0.4) * (p < 0.17 ? 1.15 : 1);
-      ctx.globalAlpha = Math.min(1, a * 2.5);
-      const y = e.y - p * 14;
-      outlinedText(e.text, e.x, y, size, '#ffd45a', '#5a3300');
-      outlinedText(e.sub, e.x, y - 18, 11, '#ffffff');
-      ctx.globalAlpha = 1;
-    } else if (e.kind === 'icon') {
-      // 往上飄的圖示（陣亡的 💀）
-      ctx.globalAlpha = Math.min(1, a * 2);
-      emoji(e.text, e.x, e.y - p * 18, 13 + Math.min(1, p * 5) * 3);
-      ctx.globalAlpha = 1;
-    } else if (e.kind === 'num') {
-      // 飄起來的傷害數字：一開始放大再縮回，往上飄並淡出
-      const size = e.size || 12;
-      ctx.globalAlpha = Math.min(1, a * 2);
-      outlinedText(e.text, e.x, e.y - p * 22, size + (1 - Math.min(1, p * 4)) * size * 0.4, e.color);
-      ctx.globalAlpha = 1;
+    if (e.kind === 'banner' || e.kind === 'flash') continue;
+    const ground = GROUND_FX.has(e.kind);
+    if ((layer === 'ground') !== ground) continue;
+    if (ground) { drawOneEffect(e); continue; }
+    if (e.kind === 'heal') { drawHealLine(e); continue; }
+    let ax = e.x, ay = e.y;
+    if (e.x1 !== undefined) {
+      const p = 1 - e.t / e.max;
+      ax = e.x1 + (e.x2 - e.x1) * p;
+      ay = e.y1 + (e.y2 - e.y1) * p;
     }
+    ctx.save();
+    at(ax, ay);
+    drawOneEffect(e);
+    ctx.restore();
   }
 }
 
+// 治療綠線：兩端各自投影後再連線
+function drawHealLine(e) {
+  const a = e.t / e.max;
+  const p1 = proj(e.src.x, e.src.y - 8);
+  const p2 = proj(e.dst.x, e.dst.y - 8);
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.strokeStyle = '#3dff7a';
+  ctx.shadowColor = '#3dff7a';
+  ctx.shadowBlur = 6;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+  ctx.restore();
+}
+
+function drawOneEffect(e) {
+  const a = e.t / e.max;   // 1 → 0
+  const p = 1 - a;         // 0 → 1（飛行進度）
+  if (e.kind === 'arrow') {
+    // 塔的箭：有箭頭的線，沿弧線飛向目標
+    const x = e.x1 + (e.x2 - e.x1) * p;
+    const y = e.y1 + (e.y2 - e.y1) * p - Math.sin(p * Math.PI) * 14;
+    const ang = Math.atan2(e.y2 - e.y1 - Math.cos(p * Math.PI) * 14 * Math.PI, e.x2 - e.x1);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    ctx.strokeStyle = '#5a3a1a';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(3, 0); ctx.stroke();
+    ctx.fillStyle = '#ddd';
+    ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(1, -2.5); ctx.lineTo(1, 2.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-10, -1.8, 3, 1.2);
+    ctx.fillRect(-10, 0.6, 3, 1.2);
+    ctx.restore();
+  } else if (e.kind === 'ball') {
+    const x = e.x1 + (e.x2 - e.x1) * p;
+    const y = e.y1 + (e.y2 - e.y1) * p;
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+  } else if (e.kind === 'orb') {
+    const x = e.x1 + (e.x2 - e.x1) * p;
+    const y = e.y1 + (e.y2 - e.y1) * p - 10;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 10);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.3, 'rgba(255,190,90,0.95)');
+    g.addColorStop(1, 'rgba(255,90,30,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+  } else if (e.kind === 'splash') {
+    ctx.fillStyle = `rgba(255,140,40,${a * 0.3})`;
+    ctx.strokeStyle = `rgba(255,200,120,${a})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(e.x, e.y, 30 * (0.6 + p * 0.4), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  } else if (e.kind === 'boom') {
+    const r = BOMB.radius * (0.5 + p * 0.8);
+    const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, r);
+    g.addColorStop(0, `rgba(255,255,220,${a})`);
+    g.addColorStop(0.4, `rgba(255,170,50,${a * 0.9})`);
+    g.addColorStop(1, 'rgba(200,60,20,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.fill();
+  } else if (e.kind === 'spawn') {
+    ctx.strokeStyle = e.color;
+    ctx.globalAlpha = a;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.ellipse(e.x, e.y + 6, 8 + p * 26, (8 + p * 26) * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  } else if (e.kind === 'ring') {
+    const r = e.r0 + (e.r1 - e.r0) * (1 - a * a);
+    ctx.strokeStyle = e.color;
+    ctx.globalAlpha = a;
+    ctx.lineWidth = e.width * (0.4 + a * 0.6);
+    ctx.beginPath(); ctx.ellipse(e.x, e.y, r, r * 0.5, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+  } else if (e.kind === 'pillar') {
+    const g = ctx.createLinearGradient(0, e.y - 50, 0, e.y + 6);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(1, e.color);
+    ctx.globalAlpha = a * 0.55;
+    ctx.fillStyle = g;
+    const w = 14 * (0.5 + a * 0.5);
+    ctx.fillRect(e.x - w / 2, e.y - 50, w, 56);
+    ctx.globalAlpha = 1;
+  } else if (e.kind === 'deny') {
+    ctx.globalAlpha = a;
+    outlinedText('✕', e.x, e.y - p * 6, 20 + (1 - a) * 6, '#ff5a5f');
+    ctx.globalAlpha = 1;
+  } else if (e.kind === 'counter') {
+    // 剋制成功：金色大字彈出，上面一行小字寫誰剋誰
+    const pop = Math.min(1, p * 6);
+    const size = 20 * (0.6 + pop * 0.4) * (p < 0.17 ? 1.15 : 1);
+    ctx.globalAlpha = Math.min(1, a * 2.5);
+    const y = e.y - p * 14;
+    outlinedText(e.text, e.x, y, size, '#ffd45a', '#5a3300');
+    outlinedText(e.sub, e.x, y - 18, 11, '#ffffff');
+    ctx.globalAlpha = 1;
+  } else if (e.kind === 'icon') {
+    ctx.globalAlpha = Math.min(1, a * 2);
+    emoji(e.text, e.x, e.y - p * 18, 13 + Math.min(1, p * 5) * 3);
+    ctx.globalAlpha = 1;
+  } else if (e.kind === 'num') {
+    const size = e.size || 12;
+    ctx.globalAlpha = Math.min(1, a * 2);
+    outlinedText(e.text, e.x, e.y - p * 22, size + (1 - Math.min(1, p * 4)) * size * 0.4, e.color);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// 粒子：畫在投影後的位置，遠處的小一點
 function drawParticles() {
   for (const p of G.particles) {
+    const q = proj(p.x, p.y);
+    const s = sc(p.y);
     if (p.chunk) {
-      // 石塊碎片：會旋轉的方塊，最後 0.4 秒淡出
       ctx.globalAlpha = Math.min(1, p.life / 0.4);
       ctx.save();
-      ctx.translate(p.x, p.y);
+      ctx.translate(q.x, q.y);
       ctx.rotate(p.rot);
+      ctx.scale(s, s);
       ctx.fillStyle = p.color;
       ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.8);
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ctx.fillRect(-p.size / 2, p.size * 0.15, p.size, p.size * 0.25);
+      if (p.size > 6) {   // 大石塊：畫上磚縫
+        ctx.strokeStyle = 'rgba(60,50,35,0.45)';
+        ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.moveTo(-p.size / 2, 0); ctx.lineTo(p.size / 2, 0); ctx.moveTo(0, -p.size / 2); ctx.lineTo(0, 0); ctx.stroke();
+      }
       ctx.restore();
       continue;
     }
     ctx.globalAlpha = Math.max(0, p.life / p.max);
     ctx.fillStyle = p.color;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (0.5 + 0.5 * p.life / p.max), 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(q.x, q.y, p.size * s * (0.5 + 0.5 * p.life / p.max), 0, Math.PI * 2); ctx.fill();
   }
   ctx.globalAlpha = 1;
 }
@@ -3570,49 +4259,70 @@ function drawBanner() {
     b = G.effects.find(e => e.kind === 'banner');
     if (b) { text = b.text; scale = 1 + Math.max(0, b.t / b.max - 0.7) * 1.2; alpha = Math.min(1, b.t / b.max * 3); }
   }
-  // 遊戲結束：競技場變暗（落敗再加一點灰）
   if (G.over) {
     ctx.fillStyle = G.result === 'lose' ? 'rgba(20,24,34,0.45)' : 'rgba(10,12,24,0.3)';
     ctx.fillRect(0, 0, W, H);
   }
   if (!text) return;
-  // 勝負的大字用不同顏色：勝利金、落敗灰、平手藍
   const palette = { win: ['#ffd45a', '#5a3300'], lose: ['#c9d0de', '#1d2230'], draw: ['#9cc2ff', '#13306b'] };
   const [fill, stroke] = (b && b.result) ? palette[b.result] : palette.win;
+  const cy = proj(W / 2, RIVER_Y).y;   // 河在畫面上的位置
   ctx.save();
   ctx.globalAlpha = alpha;
-  const g = ctx.createLinearGradient(0, RIVER_Y - 40, 0, RIVER_Y + 40);
+  const g = ctx.createLinearGradient(0, cy - 40, 0, cy + 40);
   g.addColorStop(0, 'rgba(0,0,0,0)');
   g.addColorStop(0.5, 'rgba(0,0,0,0.5)');
   g.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = g;
-  ctx.fillRect(0, RIVER_Y - 40, W, 80);
+  ctx.fillRect(0, cy - 40, W, 80);
   const size = Math.round((text.length > 2 ? 34 : 50) * scale);
-  outlinedText(text, W / 2, RIVER_Y + 2, size, fill, stroke);
+  outlinedText(text, W / 2, cy + 2, size, fill, stroke);
   ctx.restore();
 }
 
+// 把平面的地面層「往後倒」畫到畫面上：一條一條橫向切片，越上面越窄
+function drawGroundWarped() {
+  const rx = groundCanvas.width / W;
+  const ry = groundCanvas.height / H;
+  const step = 2;
+  for (let y = 0; y < H; y += step) {
+    const s = sc(y + step / 2);
+    const y0 = proj(0, y).y;
+    const y1 = proj(0, y + step).y;
+    const w = W * s;
+    ctx.drawImage(groundCanvas, 0, y * ry, W * rx, step * ry, W / 2 - w / 2, y0, w, y1 - y0 + 0.5);
+  }
+}
+
 function draw() {
-  ctx.save();
-  // 畫面震動
-  if (G.shake > 0) ctx.translate(randRange(-G.shake, G.shake), randRange(-G.shake, G.shake));
+  // 1) 地面層：在平面的 groundCanvas 上畫草地、河、下牌區、地面特效、下牌預覽
+  const main = ctx;
+  ctx = gctx;
   ctx.drawImage(bgCanvas, 0, 0, W, H);
   drawWater();
   drawDeployZone();
+  drawEffects('ground');
+  drawDeployPreview();
+  ctx = main;
+
+  // 2) 主畫面：四周景色 → 傾斜的地面 → 場地石牆 → 塔和單位（依遠近縮放）→ 粒子、特效
+  ctx.save();
+  if (G.shake > 0) ctx.translate(randRange(-G.shake, G.shake), randRange(-G.shake, G.shake));
+  ctx.drawImage(surroundCanvas, 0, 0, W, H);
+  drawGroundWarped();
+  ctx.drawImage(rimCanvas, 0, 0, W, H);
   // 塔和地面單位依 y 由上往下畫（下面的會蓋住上面的，有遠近感）
   const things = [];
-  for (const t of G.towers) things.push({ y: t.y, draw: () => drawTower(t) });
-  for (const u of G.units) if (!u.card.air) things.push({ y: u.y, draw: () => drawUnit(u) });
+  for (const t of G.towers) things.push({ x: t.x, y: t.y, draw: () => drawTower(t) });
+  for (const u of G.units) if (!u.card.air) things.push({ x: u.x, y: u.y, draw: () => drawUnit(u) });
   things.sort((a, b) => a.y - b.y);
-  for (const th of things) th.draw();
+  for (const th of things) { ctx.save(); at(th.x, th.y); th.draw(); ctx.restore(); }
   // 空中單位最後畫（在最上層）
-  for (const u of G.units) if (u.card.air) drawUnit(u);
+  for (const u of G.units) if (u.card.air) { ctx.save(); at(u.x, u.y); drawUnit(u); ctx.restore(); }
   drawParticles();
-  drawEffects();
-  drawDeployPreview();
+  drawEffects('upright');
   ctx.restore();
   ctx.drawImage(vignetteCanvas, 0, 0, W, H);
-  // 塔倒塌時整個畫面閃一下白光
   const flash = G.effects.find(e => e.kind === 'flash');
   if (flash) {
     ctx.fillStyle = `rgba(255,250,235,${(flash.t / flash.max) * 0.45})`;
@@ -3646,7 +4356,11 @@ function resize() {
   const dpr = window.devicePixelRatio || 1;
   canvas.width = Math.round(cssW * dpr);
   canvas.height = Math.round(cssH * dpr);
-  ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+  mainCtx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+  // 地面層和畫面同樣解析度
+  groundCanvas.width = canvas.width;
+  groundCanvas.height = canvas.height;
+  gctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
   stripePattern = null;
 }
 window.addEventListener('resize', resize);
@@ -3677,6 +4391,7 @@ function loop(now) {
 }
 
 buildBackground();
+buildSurround();
 renderDeckPreview();
 newGame();
 resize();
