@@ -371,6 +371,14 @@
     font-style: normal;
     filter: drop-shadow(0 3px 2px rgba(0,0,0,0.55));
   }
+  /* 4.2：卡面角色圖 */
+  .card .art > img, #nextCard .art > img, #deckPreview .mini .art > img {
+    width: 92%;
+    height: 92%;
+    object-fit: contain;
+    pointer-events: none;
+    filter: drop-shadow(0 3px 2px rgba(0,0,0,0.55));
+  }
   /* 名字列 */
   .card .name, #nextCard .name, #deckPreview .mini .name {
     position: absolute;
@@ -1171,7 +1179,7 @@ const GUIDE_COUNTERS = {
 const ACHIEVEMENTS = {
   perfect: { icon: '🛡️', name: '完美防守', desc: '敵方衝鋒豬或炸彈兵被擋下，塔沒掉血' },
   nowaste: { icon: '💧', name: '零浪費',   desc: '整場浪費聖水低於 1' },
-  crowns3: { icon: '👑', name: '三冠王',   desc: '拆掉敵方三座塔' },
+  crowns3: { icon: '👑', name: '三冠王',   desc: '拿到三顆皇冠（拆掉國王塔也算）' },
   rush:    { icon: '⚡', name: '快攻',     desc: '開場 60 秒內拆掉一座塔' },
 };
 const ACHIEVEMENT_ORDER = ['perfect', 'nowaste', 'crowns3', 'rush'];
@@ -1627,7 +1635,8 @@ function showMsg(text, ms = 1500, kind = '') {
 // 卡面：emoji、類型標籤、名字（手牌、下一張、開始畫面共用）
 function cardHTML(c) {
   const long = c.name.length >= 5 ? ' long' : '';
-  return `<span class="art"><i>${c.emoji}</i></span>` +
+  // 4.2：卡面用自己畫的角色（和場上一樣）
+  return `<span class="art"><img src="${cardArt(c)}" alt="${c.name}" draggable="false"></span>` +
          `<span class="tag">${ROLE_LABEL[c.role]}</span>` +
          `<span class="name stroke${long}">${c.name}</span>`;
 }
@@ -2198,7 +2207,7 @@ function damageTower(t, dmg) {
     // 成就：開場 60 秒內拆塔（快攻）、拆掉三座塔（三冠王）
     if (t.team === 'enemy') {
       if (GAME_TIME - G.timeLeft <= 60) award('rush');
-      if (killsBy('me') === 3) award('crowns3');
+      if (crownsBy('me') === 3) award('crowns3');
     }
     // 國王塔倒 → 對方立刻獲勝
     if (t.type === 'king') {
@@ -2318,6 +2327,12 @@ function updateAI(dt) {
 // =====================================================
 
 // 某一方摧毀了幾座敵方的塔
+// 4.2：皇冠數。拆掉幾座塔就幾顆；拆掉敵方國王塔直接算 3 顆
+// （只影響皇冠顯示和成就「三冠王」；時間到的判定仍用 killsBy，那時國王塔一定還在，所以結果一樣）
+function crownsBy(team) {
+  const foe = enemyOf(team);
+  return G.towers.some(t => t.team === foe && t.type === 'king' && !t.alive) ? 3 : killsBy(team);
+}
 function killsBy(team) {
   return G.towers.filter(t => t.team !== team && !t.alive).length;
 }
@@ -2362,9 +2377,9 @@ function endGame(result, reason) {
   titleEl.textContent = { win: '勝利', lose: '落敗', draw: '平手' }[result];
   titleEl.className = 'ribbon ' + result;
   document.getElementById('resultCrowns').innerHTML =
-    `<div><div class="side">你</div><div class="crowns">${crownsHTML(killsBy('me'))}</div></div>` +
+    `<div><div class="side">你</div><div class="crowns">${crownsHTML(crownsBy('me'))}</div></div>` +
     `<div class="vs">VS</div>` +
-    `<div><div class="side">電腦</div><div class="crowns">${crownsHTML(killsBy('enemy'))}</div></div>`;
+    `<div><div class="side">電腦</div><div class="crowns">${crownsHTML(crownsBy('enemy'))}</div></div>`;
   document.getElementById('resultReason').textContent = reason;
 
   // 出牌統計與建議
@@ -2680,14 +2695,14 @@ function updateUI() {
   timerEl.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   timerEl.classList.toggle('hurry', s <= 60 && !G.over);
   timeLabelEl.textContent = s <= 60 ? '最後一分鐘' : '剩餘時間';
-  const mk = killsBy('me');
-  const ek = killsBy('enemy');
+  const mk = crownsBy('me');
+  const ek = crownsBy('enemy');
   // 皇冠變多時，新亮的那一個彈一下
   for (const [el, n] of [[myCrownsEl, mk], [enemyCrownsEl, ek]]) {
     if (el.dataset.n === String(n)) continue;
     const before = Number(el.dataset.n || 0);
     el.innerHTML = crownsHTML(n);
-    if (n > before && el.dataset.n !== undefined) el.children[n - 1].classList.add('pop');
+    if (n > before && el.dataset.n !== undefined) for (let i = before; i < n; i++) el.children[i].classList.add('pop');
     el.dataset.n = n;
   }
   aiElixirEl.textContent = Math.floor(G.ai.elixir);
@@ -3993,6 +4008,67 @@ function spTank(P, a) {
   ctx.fillStyle = P.teamLight;
   ctx.fillRect(7.6, -20, 1.4, 11);
   ctx.fillRect(5.6, -16.4, 5.4, 1.4);
+}
+
+
+// 🔫 砲塔（卡面用）：木頭底座、隊伍色條紋、斜斜朝上的砲管
+function spCannon(P, a) {
+  sRect(-12, -10, 24, 11, 3, P.wood, P);
+  ctx.fillStyle = P.team;
+  ctx.fillRect(-12, -3.5, 24, 2.6);
+  ctx.save();
+  ctx.translate(0, -11);
+  ctx.rotate(-0.55);
+  sRect(-4, -4.2, 17, 8.4, 3.5, P.dark, P);
+  ctx.fillStyle = P.shine;
+  ctx.fillRect(-2, -3.2, 13, 1.8);
+  sCircle(13, 0, 3.4, P.dark, P);
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(13, 0, 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  sCircle(0, -11, 4.6, P.metalDark, P);
+  ctx.fillStyle = P.shine;
+  ctx.beginPath(); ctx.arc(-1.4, -12.4, 1.6, 0, Math.PI * 2); ctx.fill();
+}
+
+// 卡面圖：把角色畫到一張小畫布、轉成圖片（每張牌只畫一次）
+// list：[x 位移, y 位移, 縮放]；3 隻一組的牌畫 3 隻
+const CARD_ART_LAYOUT = {
+  minions: [[-10, -3, 2.3], [10, -3, 2.3], [0, 4, 2.5]],
+  bats:    [[-12, -6, 2.4], [12, -6, 2.4], [0, 4, 2.7]],
+  bomb:    [[0, 2, 3.1]],
+  mage:    [[-2, 4, 2.35]],
+  hog:     [[-4, 2, 2.6]],
+  healer:  [[-2, 4, 2.45]],
+  tank:    [[-3, 4, 2.3]],
+  cannon:  [[0, 2, 2.8]],
+};
+const CARD_ART_CACHE = {};
+function cardArt(c) {
+  const id = Object.keys(CARDS).find(k => CARDS[k] === c);
+  if (CARD_ART_CACHE[id]) return CARD_ART_CACHE[id];
+  const size = 96;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const saved = ctx;
+  ctx = cv.getContext('2d');   // 借用角色的畫法，畫到這張小畫布上
+  const fn = id === 'cannon' ? spCannon : SPRITES[id];
+  const P = pal('me', false);
+  const still = { walk: 0, atk: 0, swing: 0, t: 0.3, seed: 1 };
+  for (const [dx, dy, k] of CARD_ART_LAYOUT[id]) {
+    const h = (SPRITE_H[id] || 22) * k;
+    ctx.save();
+    ctx.translate(size / 2 + dx, size / 2 + h / 2 + dy);
+    ctx.scale(k, k);
+    // 地上的影子
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    if (id !== 'bats') { ctx.beginPath(); ctx.ellipse(1, 0.5, id === 'hog' ? 13 : 9, 2.6, 0, 0, Math.PI * 2); ctx.fill(); }
+    fn(P, still);
+    ctx.restore();
+  }
+  ctx = saved;
+  CARD_ART_CACHE[id] = cv.toDataURL();
+  return CARD_ART_CACHE[id];
 }
 
 const SPRITES = { minions: spMinion, bomb: spBomb, bats: spBat, mage: spMage, hog: spHog, healer: spHealer, tank: spTank };
