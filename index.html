@@ -1,0 +1,2764 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>聖水小戰場</title>
+<style>
+  /* =====================================================
+     整體配色（深色介面＋金色重點）
+     ===================================================== */
+  :root {
+    --bg: #0f1420;
+    --panel: #1a2234;
+    --panel-2: #222c42;
+    --line: rgba(255, 255, 255, 0.08);
+    --text: #eef2fa;
+    --muted: #93a0bb;
+    --gold: #ffc94a;
+    --gold-dark: #b8860b;
+    --blue: #4c8df6;
+    --red: #ef5350;
+    --elixir: #d65cf0;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+    color: var(--text);
+    font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    /* 背景：深色＋淡淡的斜紋＋中間微亮 */
+    background:
+      radial-gradient(ellipse at 50% 30%, rgba(76, 141, 246, 0.16), transparent 60%),
+      repeating-linear-gradient(45deg, rgba(255,255,255,0.018) 0 2px, transparent 2px 14px),
+      var(--bg);
+    background-attachment: fixed;
+  }
+  button { font-family: inherit; }
+  #app {
+    max-width: 440px;
+    margin: 0 auto;
+    padding: 8px 10px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+  }
+  /* 遊戲風格的粗體描邊字 */
+  .stroke {
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.8);
+  }
+
+  /* =====================================================
+     頂部 HUD：雙方名牌＋時間
+     ===================================================== */
+  #hud {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .plate {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 8px;
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    position: relative;
+    overflow: hidden;
+  }
+  .plate::before {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: 3px;
+  }
+  .plate.me::before { background: var(--blue); }
+  .plate.enemy::before { background: var(--red); }
+  .plate.enemy { justify-content: flex-end; text-align: right; }
+  .avatar {
+    width: 30px; height: 30px;
+    flex: none;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .plate.me .avatar { background: linear-gradient(#5d9bff, #2d62c9); }
+  .plate.enemy .avatar { background: linear-gradient(#ff6f6f, #c33232); }
+  .pname { font-size: 12px; font-weight: 900; letter-spacing: 1px; }
+  .crowns { display: flex; gap: 1px; font-size: 13px; line-height: 1.2; }
+  .plate.enemy .crowns { justify-content: flex-end; }
+  .crowns span { filter: grayscale(1) brightness(0.35); }
+  .crowns span.on { filter: drop-shadow(0 0 4px var(--gold)); }
+  #timeBox {
+    min-width: 76px;
+    text-align: center;
+    padding: 3px 10px;
+    background: linear-gradient(180deg, #0b0f18, #151c2b);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  #timeLabel { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+  #timer { font-size: 22px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  #timer.hurry { color: #ff6b6b; animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.6; } }
+
+  /* =====================================================
+     競技場外框
+     ===================================================== */
+  #arenaWrap {
+    position: relative;
+    padding: 5px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #4b3a26, #2e2214);
+    box-shadow:
+      0 0 0 1px rgba(0,0,0,0.6),
+      0 10px 30px rgba(0,0,0,0.55),
+      inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+  #arena {
+    display: block;
+    border-radius: 9px;
+    touch-action: none;
+    cursor: crosshair;
+  }
+  #msg {
+    position: absolute;
+    left: 50%;
+    bottom: 13%;
+    transform: translateX(-50%);
+    padding: 7px 16px;
+    border-radius: 999px;
+    background: rgba(10, 14, 22, 0.85);
+    border: 1px solid rgba(255,255,255,0.15);
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+    pointer-events: none;
+    transition: opacity 0.25s, transform 0.25s;
+  }
+  #msg.hide { opacity: 0; transform: translateX(-50%) translateY(6px); }
+
+  /* =====================================================
+     聖水條（10 格，每格單獨填滿）
+     ===================================================== */
+  #elixirRow {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .gem {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50% 0 50% 50%;
+    transform: rotate(-45deg);
+    background: radial-gradient(circle at 35% 30%, #ffd3ff 0%, #e070f5 35%, #9b2bc0 75%, #5c137a 100%);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 0 0 1.5px rgba(255,255,255,0.75);
+  }
+  .gem > b {
+    transform: rotate(45deg);
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 1px 0 #3b0a50, 0 0 2px #3b0a50;
+  }
+  #elixirGem { width: 34px; height: 34px; flex: none; }
+  #elixirGem > b { font-size: 17px; }
+  #elixirBar {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 3px;
+    padding: 3px;
+    background: #0b0f18;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .cell {
+    position: relative;
+    height: 16px;
+    border-radius: 4px;
+    background: #24183a;
+    overflow: hidden;
+  }
+  .cell > i {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 0;
+    background: linear-gradient(180deg, #f6a8ff, #d65cf0 50%, #a22fc4);
+  }
+  .cell.part > i { opacity: 0.55; }
+  .cell::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: 40%;
+    background: rgba(255,255,255,0.16);
+  }
+  #elixirBar.full .cell > i { animation: elixirGlow 0.9s ease-in-out infinite alternate; }
+  @keyframes elixirGlow { to { filter: brightness(1.5); } }
+
+  /* =====================================================
+     手牌（卡框顏色依類型）
+     ===================================================== */
+  #handRow {
+    width: 100%;
+    display: flex;
+    align-items: stretch;
+    gap: 7px;
+    padding: 9px 8px 8px;
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--line);
+    border-radius: 14px;
+  }
+  #hand {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 7px;
+  }
+  .card {
+    --role: #4c8df6;
+    position: relative;
+    height: 88px;
+    padding: 0;
+    border: none;
+    border-radius: 10px;
+    background: var(--role);   /* 舊瀏覽器的備用顏色 */
+    background: linear-gradient(180deg, color-mix(in srgb, var(--role) 85%, white), var(--role) 40%, color-mix(in srgb, var(--role) 55%, black));
+    box-shadow: 0 3px 0 rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.25);
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: transform 0.14s cubic-bezier(.3,1.6,.6,1), box-shadow 0.14s;
+    overflow: visible;
+  }
+  .card .art {
+    position: absolute;
+    left: 4px; right: 4px; top: 4px; bottom: 22px;
+    border-radius: 7px;
+    background: radial-gradient(circle at 50% 35%, rgba(255,255,255,0.55), rgba(0,0,0,0.15));
+    background:
+      radial-gradient(circle at 50% 35%, rgba(255,255,255,0.55), transparent 60%),
+      linear-gradient(180deg, color-mix(in srgb, var(--role) 35%, white), color-mix(in srgb, var(--role) 70%, black));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    box-shadow: inset 0 -6px 10px rgba(0,0,0,0.25);
+    overflow: hidden;
+  }
+  .card .name {
+    position: absolute;
+    left: 0; right: 0; bottom: 5px;
+    font-size: 11px;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .card .name.long, #nextCard .name.long { font-size: 9.5px; }
+  .card .gem {
+    position: absolute;
+    left: -6px;
+    top: -6px;
+    width: 22px;
+    height: 22px;
+    z-index: 2;
+  }
+  .card .gem > b { font-size: 12px; }
+  /* 聖水不夠：從上往下蓋一層暗色，聖水越接近，暗色越少（像在充能） */
+  .card .shade {
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: 0;
+    border-radius: 10px 10px 0 0;
+    background: rgba(8, 10, 18, 0.62);
+    pointer-events: none;
+    transition: height 0.15s linear;
+  }
+  .card.poor { filter: saturate(0.35); }
+  .card.selected {
+    transform: translateY(-10px) scale(1.05);
+    box-shadow: 0 0 0 2px var(--gold), 0 0 18px rgba(255,201,74,0.7), 0 6px 0 rgba(0,0,0,0.45);
+  }
+  @media (hover: hover) {
+    .card:not(.poor):not(.selected):hover { transform: translateY(-4px); }
+  }
+  /* 依類型的卡框顏色 */
+  .role-core     { --role: #e0a92a; }   /* 進攻核心：金色 */
+  .role-troop    { --role: #4c8df6; }   /* 一般部隊：藍色 */
+  .role-air      { --role: #22b3ad; }   /* 空中：青色 */
+  .role-magic    { --role: #9a62ff; }   /* 法師：紫色 */
+  .role-support  { --role: #3fb75e; }   /* 輔助：綠色 */
+  .role-building { --role: #8592a6; }   /* 建築：鐵灰 */
+
+  #nextBox {
+    width: 54px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 3px;
+  }
+  .next-label { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+  #nextCard {
+    position: relative;
+    width: 54px;
+    height: 64px;
+    border-radius: 8px;
+    background: var(--role, #4c8df6);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--role) 80%, white), color-mix(in srgb, var(--role) 55%, black));
+    opacity: 0.8;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25);
+  }
+  #nextCard .art {
+    position: absolute;
+    left: 3px; right: 3px; top: 3px; bottom: 17px;
+    border-radius: 5px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--role) 35%, white), color-mix(in srgb, var(--role) 70%, black));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 21px;
+  }
+  #nextCard .name { position: absolute; left: 0; right: 0; bottom: 3px; font-size: 9px; white-space: nowrap; text-align: center; }
+
+  /* =====================================================
+     教練（頭像＋對話框）
+     ===================================================== */
+  #coach {
+    width: 100%;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .coach-avatar {
+    width: 44px; height: 44px;
+    flex: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 25px;
+    background: radial-gradient(circle at 40% 35%, #fff3cf, #f2c14e 70%, #b8860b);
+    box-shadow: 0 0 0 2px #1a2234, 0 0 0 3px var(--gold), 0 3px 8px rgba(0,0,0,0.5);
+  }
+  .bubble {
+    position: relative;
+    flex: 1;
+    height: 100%;
+    padding: 5px 10px;
+    background: #f7f1e1;
+    color: #3a2c10;
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .bubble::before {
+    content: "";
+    position: absolute;
+    left: -6px; top: 50%;
+    margin-top: -6px;
+    border: 6px solid transparent;
+    border-right-color: #f7f1e1;
+    border-left: 0;
+  }
+  .coach-name { font-size: 10px; font-weight: 900; color: #b07a00; letter-spacing: 1px; }
+  #coachText { font-size: 12.5px; font-weight: 700; line-height: 1.35; }
+  #coach.flash .bubble { animation: bubblePop 0.35s ease-out; }
+  @keyframes bubblePop { 0% { transform: scale(0.96); } 60% { transform: scale(1.02); } 100% { transform: scale(1); } }
+
+  /* =====================================================
+     剋制小抄（手機版隱藏，電腦版才顯示）
+     ===================================================== */
+  #guide { display: none; }
+  .guide-title {
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .guide-title span { font-size: 11px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+  .guide-row {
+    display: grid;
+    grid-template-columns: 92px 16px 1fr;
+    align-items: center;
+    padding: 6px 4px;
+    font-size: 13px;
+    border-top: 1px solid var(--line);
+  }
+  .guide-row .foe { color: #ffb0ae; font-weight: 700; }
+  .guide-row .arrow { color: var(--muted); }
+  .guide-row .ans { color: #b9d4ff; }
+
+  /* =====================================================
+     底部：音效、測試工具
+     ===================================================== */
+  #footer {
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .small-btn {
+    flex: none;
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  #testPanel {
+    flex: 1;
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 4px 8px;
+  }
+  #testPanel summary { cursor: pointer; padding: 1px 0; }
+  #testPanel .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0 2px; }
+  #testPanel label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  #testPanel button {
+    font-size: 12px; padding: 3px 8px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer;
+  }
+
+  /* =====================================================
+     開始畫面、結算畫面（共用的遮罩）
+     ===================================================== */
+  .screen {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(6, 9, 16, 0.72);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+  }
+  .screen[hidden] { display: none; }
+  .sheet {
+    width: min(360px, 100%);
+    max-height: 94vh;
+    overflow-y: auto;
+    padding: 22px 20px 20px;
+    text-align: center;
+    background: linear-gradient(180deg, #222c44, #161d2e);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 18px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+    animation: sheetIn 0.35s cubic-bezier(.2,1.4,.5,1);
+  }
+  @keyframes sheetIn { from { transform: translateY(20px) scale(0.95); opacity: 0; } }
+  /* Logo 文字：金色漸層＋立體陰影 */
+  .logo {
+    font-size: 40px;
+    font-weight: 900;
+    letter-spacing: 4px;
+    line-height: 1.1;
+    background: linear-gradient(180deg, #fff6cf 0%, #ffd45a 45%, #e09a12 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 3px 0 #6b3d00) drop-shadow(0 6px 10px rgba(0,0,0,0.5));
+  }
+  .logo-sub {
+    margin: 6px 0 16px;
+    font-size: 12px;
+    letter-spacing: 3px;
+    color: var(--muted);
+  }
+  .section-title {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    margin: 0 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title::before, .section-title::after {
+    content: ""; flex: 1; height: 1px; background: var(--line);
+  }
+  #deckPreview {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  #deckPreview .mini {
+    position: relative;
+    height: 58px;
+    border-radius: 8px;
+    background: var(--role);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--role) 80%, white), color-mix(in srgb, var(--role) 55%, black));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25);
+  }
+  #deckPreview .mini .e { font-size: 22px; line-height: 1.2; }
+  #deckPreview .mini .n { font-size: 9.5px; white-space: nowrap; }
+  #deckPreview .mini .gem { position: absolute; left: -5px; top: -5px; width: 18px; height: 18px; }
+  #deckPreview .mini .gem > b { font-size: 10px; }
+  .howto {
+    list-style: none;
+    margin: 0 0 18px;
+    padding: 0;
+    text-align: left;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .howto li {
+    display: flex;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .howto li b {
+    flex: none;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--gold);
+    color: #3a2a00;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+  }
+  .btn-primary {
+    width: 100%;
+    font-size: 19px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    padding: 12px 0;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #ffe48a, #ffbf2b 55%, #f29b0c);
+    color: #4a2a00;
+    cursor: pointer;
+    touch-action: manipulation;
+    box-shadow: 0 5px 0 #9a5a00, 0 8px 18px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.7);
+    transition: transform 0.08s, box-shadow 0.08s;
+  }
+  .btn-primary:active { transform: translateY(4px); box-shadow: 0 1px 0 #9a5a00, inset 0 1px 0 rgba(255,255,255,0.7); }
+  .btn-secondary {
+    width: 100%;
+    margin-top: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 9px 0;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  /* 結算 */
+  .ribbon {
+    margin: -22px -20px 14px;
+    padding: 16px 0 12px;
+    border-radius: 18px 18px 0 0;
+    font-size: 32px;
+    font-weight: 900;
+    letter-spacing: 4px;
+    text-shadow: 0 3px 0 rgba(0,0,0,0.35);
+  }
+  .ribbon.win { background: linear-gradient(180deg, #ffd45a, #e39a12); color: #4a2a00; }
+  .ribbon.lose { background: linear-gradient(180deg, #7a8296, #4a5063); color: #fff; }
+  .ribbon.draw { background: linear-gradient(180deg, #6fa0ff, #3a66c8); color: #fff; }
+  #resultCrowns {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  #resultCrowns .side { font-size: 11px; color: var(--muted); }
+  #resultCrowns .crowns { justify-content: center; font-size: 22px; }
+  #resultCrowns .vs { font-size: 13px; font-weight: 900; color: var(--muted); }
+  #resultReason { font-size: 13px; color: #cfd7ea; margin-bottom: 12px; }
+  .stats { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; }
+  .stats td { padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  .stats td:first-child { text-align: left; color: var(--muted); }
+  .stats td:last-child { text-align: right; font-weight: 900; }
+  .advice {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    text-align: left;
+    background: #f7f1e1;
+    color: #3a2c10;
+    border-radius: 10px;
+    padding: 9px 10px;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+  .advice span { font-size: 22px; }
+
+  /* =====================================================
+     寬螢幕（電腦）：競技場在左邊放大，介面放右側面板
+     ===================================================== */
+  @media (min-width: 860px) {
+    #app {
+      max-width: 900px;
+      min-height: 100vh;
+      padding: 12px 16px;
+      display: grid;
+      grid-template-columns: auto 380px;
+      grid-template-areas:
+        "arena hud"
+        "arena elixir"
+        "arena hand"
+        "arena coach"
+        "arena guide"
+        "arena footer";
+      grid-template-rows: auto auto auto auto 1fr auto;
+      column-gap: 20px;
+      row-gap: 12px;
+      align-content: center;
+      justify-content: center;
+    }
+    #hud { grid-area: hud; }
+    #arenaWrap { grid-area: arena; align-self: center; }
+    #elixirRow { grid-area: elixir; }
+    #handRow { grid-area: hand; }
+    #coach { grid-area: coach; height: 76px; }
+    #footer { grid-area: footer; }
+    #guide {
+      grid-area: guide;
+      display: block;
+      align-self: start;
+      padding: 10px 12px 4px;
+      background: linear-gradient(180deg, var(--panel-2), var(--panel));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+    .card { height: 104px; }
+    .card .art { font-size: 36px; bottom: 24px; }
+    .card .name { font-size: 12px; }
+    .card .gem { width: 26px; height: 26px; }
+    .card .gem > b { font-size: 14px; }
+    #nextCard { height: 76px; }
+    #timer { font-size: 26px; }
+    .avatar { width: 36px; height: 36px; font-size: 21px; }
+    .pname { font-size: 14px; }
+    .crowns { font-size: 16px; }
+    .cell { height: 20px; }
+    #elixirGem { width: 40px; height: 40px; }
+    #elixirGem > b { font-size: 20px; }
+    #coachText { font-size: 14px; }
+    .coach-avatar { width: 54px; height: 54px; font-size: 30px; }
+  }
+
+  /* =====================================================
+     矮螢幕（小手機）：介面縮小，讓競技場大一點
+     ===================================================== */
+  @media (max-height: 720px) and (max-width: 859px) {
+    #app { gap: 5px; padding-top: 5px; }
+    .plate { padding: 3px 6px; }
+    .avatar { width: 24px; height: 24px; font-size: 14px; }
+    #timer { font-size: 18px; }
+    .card { height: 70px; }
+    .card .art { font-size: 23px; bottom: 19px; }
+    .card .name { font-size: 10px; bottom: 4px; }
+    #handRow { padding: 7px 7px 6px; }
+    #nextCard { height: 54px; }
+    #nextCard .art { font-size: 17px; bottom: 15px; }
+    #coach { height: 46px; }
+    .coach-avatar { width: 36px; height: 36px; font-size: 20px; }
+    #coachText { font-size: 11.5px; }
+    .coach-name { display: none; }
+    #elixirGem { width: 28px; height: 28px; }
+    #elixirGem > b { font-size: 14px; }
+    .cell { height: 13px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- 頂部：雙方名牌（皇冠 = 摧毀的塔數）與剩餘時間 -->
+  <header id="hud">
+    <div class="plate me">
+      <div class="avatar">🧑</div>
+      <div><div class="pname">你</div><div class="crowns" id="myCrowns"></div></div>
+    </div>
+    <div id="timeBox">
+      <div id="timeLabel">剩餘時間</div>
+      <div id="timer">3:00</div>
+    </div>
+    <div class="plate enemy">
+      <div><div class="pname">電腦</div><div class="crowns" id="enemyCrowns"></div></div>
+      <div class="avatar">🤖</div>
+    </div>
+  </header>
+
+  <!-- 競技場 -->
+  <div id="arenaWrap">
+    <canvas id="arena"></canvas>
+    <div id="msg" class="hide"></div>
+  </div>
+
+  <!-- 聖水條 -->
+  <div id="elixirRow">
+    <span class="gem" id="elixirGem"><b id="elixirNum">5</b></span>
+    <div id="elixirBar"></div>
+  </div>
+
+  <!-- 手牌 4 張 ＋ 下一張 -->
+  <div id="handRow">
+    <div id="hand"></div>
+    <div id="nextBox">
+      <div class="next-label">下一張</div>
+      <div id="nextCard"></div>
+    </div>
+  </div>
+
+  <!-- 教練提示 -->
+  <div id="coach">
+    <div class="coach-avatar">🧑‍🏫</div>
+    <div class="bubble">
+      <div class="coach-name">教練</div>
+      <div id="coachText"></div>
+    </div>
+  </div>
+
+  <!-- 剋制小抄（只在電腦版顯示） -->
+  <div id="guide">
+    <div class="guide-title">剋制小抄 <span>敵方出什麼 → 你可以用</span></div>
+    <div class="guide-row"><span class="foe">🐗 衝鋒豬</span><span class="arrow">→</span><span class="ans">🔫 砲塔 ・ 👥 小兵群</span></div>
+    <div class="guide-row"><span class="foe">🛡️ 坦克</span><span class="arrow">→</span><span class="ans">👥 小兵群 ・ 🧙 法師</span></div>
+    <div class="guide-row"><span class="foe">💣 炸彈兵</span><span class="arrow">→</span><span class="ans">🔫 砲塔 ・ 👥 小兵群</span></div>
+    <div class="guide-row"><span class="foe">🦇 蝙蝠群</span><span class="arrow">→</span><span class="ans">🧙 法師</span></div>
+    <div class="guide-row"><span class="foe">👥 小兵群</span><span class="arrow">→</span><span class="ans">🧙 法師 ・ 🦇 蝙蝠群</span></div>
+    <div class="guide-row"><span class="foe">💚 治療師</span><span class="arrow">→</span><span class="ans">🧙 法師</span></div>
+  </div>
+
+  <!-- 音效開關、測試工具 -->
+  <div id="footer">
+    <button class="small-btn" id="soundBtn">🔊 音效開</button>
+    <details id="testPanel">
+      <summary>🛠 測試工具</summary>
+      <div class="row">
+        <label><input type="checkbox" id="aiOn" checked> 🤖 電腦對手出牌</label>
+        <label><input type="checkbox" id="testMode"> 🧪 測試模式：可點敵方半場替敵方下牌（不扣聖水）</label>
+        <button id="skipTimeBtn">⏩ 時間跳到剩 10 秒</button>
+        <span>敵方聖水：<b id="aiElixir">5</b></span>
+      </div>
+    </details>
+  </div>
+</div>
+
+<!-- 開始畫面 -->
+<div class="screen" id="startScreen">
+  <div class="sheet">
+    <div class="logo">聖水小戰場</div>
+    <div class="logo-sub">即時對戰卡牌 ・ 新手練習場</div>
+    <div class="section-title">你的牌組</div>
+    <div id="deckPreview"></div>
+    <div class="section-title">怎麼玩</div>
+    <ul class="howto">
+      <li><b>1</b><span>點一張手牌，再點河下方的草地下牌</span></li>
+      <li><b>2</b><span>聖水會慢慢回復，滿了不用就是浪費</span></li>
+      <li><b>3</b><span>拆掉對方的國王塔就贏；3 分鐘到了比誰拆得多</span></li>
+    </ul>
+    <button class="btn-primary" id="startBtn">開始對戰</button>
+  </div>
+</div>
+
+<!-- 結算畫面 -->
+<div class="screen" id="overlay" hidden>
+  <div class="sheet">
+    <div class="ribbon" id="resultTitle"></div>
+    <div id="resultCrowns"></div>
+    <div id="resultReason"></div>
+    <div id="resultDetail"></div>
+    <button class="btn-primary" id="againBtn">再玩一次</button>
+    <button class="btn-secondary" id="menuBtn">回主畫面</button>
+  </div>
+</div>
+
+<script>
+// =====================================================
+// 基本設定（數值都照 README）
+// =====================================================
+const W = 360;              // 競技場邏輯寬度
+const H = 680;              // 競技場邏輯高度（國王塔後面留空間，可以「沉底」下牌）
+const RIVER_Y = 340;        // 河的中心線
+const RIVER_HALF = 12;      // 河寬的一半（河從 y=328 到 y=352）
+const LANES = [90, 270];    // 左右兩條路線的 x 座標（橋也在這裡）
+const BRIDGE_HALF = 20;     // 橋寬的一半
+const TOWER_HIT = 35;       // 塔的受攻擊範圍（半徑）
+const UNIT_R = 10;          // 單位的身體半徑（攻擊單位時，射程從對方身體邊緣算）
+const MELEE = 18;           // 近戰射程
+const SIGHT = 110;          // 索敵範圍（5.5 格，參考原遊戲）：範圍內看到敵方單位會追過去打
+
+// 塔的位置
+const ENEMY_KING_Y = 95;
+const ENEMY_PRINCESS_Y = 150;
+const MY_PRINCESS_Y = 530;
+const MY_KING_Y = 585;
+
+const ELIXIR_MAX = 10;      // 聖水上限
+const ELIXIR_START = 5;     // 開局聖水
+const ELIXIR_REGEN = 2.8;   // 每 2.8 秒回復 1 點
+const GAME_TIME = 180;      // 對戰時間 3 分鐘
+const COUNTDOWN = 3;        // 開場倒數 3 秒
+
+// 塔的數值（參考原遊戲 11 級，血量和傷害 ÷3.05；射程 1 格 = 20 px）
+const TOWER_STATS = {
+  princess: { hp: 1000, dmg: 36, atk: 0.8, range: 150 },   // 射程 7.5 格
+  king:     { hp: 1580, dmg: 36, atk: 1.0, range: 140 },   // 射程 7 格
+};
+
+// 8 張牌的數值
+// range：攻擊射程；atk：攻速（秒）；speed：移速（每秒幾 px）
+// air：空中單位；hitsAir：打得到空中；buildingsOnly：只打建築（塔、砲塔）、不理單位
+// jumpRiver：可以直接過河不用走橋；splash：範圍傷害半徑
+// building：建築（不會移動）；lifetime：建築持續幾秒（血量隨時間減少）
+// role：卡框顏色的類型（只影響外觀）
+const CARDS = {
+  cannon: { name: '砲塔',       emoji: '🔫',  cost: 3, count: 1, hp: 270,  dmg: 70,  atk: 0.9, range: 110,   speed: 0,  building: true, lifetime: 30, role: 'building' },
+  minions:{ name: '小兵群',     emoji: '👥',  cost: 3, count: 3, hp: 66,   dmg: 39,  atk: 1.1, range: MELEE, speed: 40, role: 'troop' },
+  bomb:   { name: '炸彈兵',     emoji: '💣',  cost: 3, count: 1, hp: 160,  dmg: 0,   atk: 0,   range: 0,     speed: 38, bomb: true, role: 'core' },
+  bats:   { name: '蝙蝠群',     emoji: '🦇',  cost: 3, count: 3, hp: 27,   dmg: 27,  atk: 1.2, range: MELEE, speed: 40, air: true, hitsAir: true, role: 'air' },
+  mage:   { name: '法師',       emoji: '🧙',  cost: 4, count: 1, hp: 248,  dmg: 92,  atk: 1.4, range: 110,   speed: 20, hitsAir: true, splash: 30, role: 'magic' },
+  hog:    { name: '衝鋒豬',     emoji: '🐗',  cost: 4, count: 1, hp: 556,  dmg: 104, atk: 1.6, range: MELEE, speed: 40, buildingsOnly: true, jumpRiver: true, role: 'core' },
+  healer: { name: '遠程治療師', emoji: '💚',  cost: 4, count: 1, hp: 220,  dmg: 0,   atk: 1.5, range: 110,   speed: 20, healer: true, heal: 50, role: 'support' },
+  tank:   { name: '坦克',       emoji: '🛡️', cost: 5, count: 1, hp: 1000, dmg: 60,  atk: 3.5, range: MELEE, speed: 20, role: 'troop' },   // 前排肉盾：會打單位也會打塔
+};
+const DECK = ['cannon', 'minions', 'bomb', 'bats', 'mage', 'hog', 'healer', 'tank'];
+const CANNON_R = 14;        // 砲塔的身體半徑（被攻擊、被炸的範圍從這裡算）
+
+// 教練提示：自己第一次出某張牌時，說明它的特色
+const CARD_TIPS = {
+  cannon:  '🔫 砲塔：放在兩條路中間，可以把衝鋒豬、炸彈兵引過來打；只打地面，30 秒後消失',
+  minions: '👥 小兵群：一次 3 隻，圍毆坦克、衝鋒豬很有效，但怕法師的範圍傷害',
+  bomb:    '💣 炸彈兵：只衝塔，到塔就自爆；被塔打到會加速衝刺',
+  bats:    '🦇 蝙蝠群：在空中，近戰單位打不到，只有法師和塔打得到',
+  mage:    '🧙 法師：範圍傷害，一次打好幾隻，也能打空中',
+  hog:     '🐗 衝鋒豬：跑很快、只打建築、可以跳河，是推塔主力',
+  healer:  '💚 遠程治療師：不攻擊，會幫血量最少的友軍補血，要保護好它',
+  tank:    '🛡️ 坦克：很耐打但打得很慢，走在前面幫隊友擋傷害',
+};
+// 教練提示：敵方出某張牌時（每種牌整場只提示一次）
+const ENEMY_TIPS = {
+  hog:     '敵方出了衝鋒豬！跑很快、只打建築。用砲塔把它引開、用小兵群去攔，或靠法師和塔來打',
+  tank:    '敵方出了坦克！很耐打但打得很慢，用小兵群圍毆或法師來對付',
+  bats:    '敵方出了蝙蝠！在空中，近戰打不到，要用法師',
+  minions: '敵方出了小兵群！數量多，法師的範圍傷害很有效',
+  bomb:    '敵方出了炸彈兵！會衝塔自爆，用砲塔把它引開，或用小兵群在半路攔住',
+  healer:  '敵方出了治療師！會幫對手補血，優先用法師打掉它',
+  cannon:  '敵方放了砲塔！你的衝鋒豬、炸彈兵會被它吸過去，可以先拆掉它或等它時間到消失',
+};
+const COMBO_TIP = '他們在配合：坦克吸引塔，衝鋒豬跟在後面，先處理衝鋒豬';
+
+// 炸彈兵的特別設定（和使用者討論後決定）
+const BOMB = {
+  drainPerSec: 34,   // 被「塔」打到後，每秒自己扣 34 血
+  boostMul: 2,       // 倒扣血時，移速變 2 倍（38 → 76）
+  radius: 40,        // 爆炸半徑（對塔從塔的邊緣算起）
+  towerDmg: 300,     // 對塔的傷害
+  unitDmg: 150,      // 對敵方地面單位的傷害
+};
+
+// 遠程治療師跟在友軍後方的距離
+const HEALER_FOLLOW = 60;
+
+// 敵方公主塔倒了之後，那一路的敵方半場可以下牌的範圍：從河邊到離底線 170 px
+const POCKET_DEPTH = 170;
+
+// 電腦對手的設定
+const AI_START_DELAY = 5;   // 開局前 5 秒不出牌
+const AI_MIN_GAP = 3;       // 隨機出牌間隔 3～6 秒
+const AI_MAX_GAP = 6;
+const AI_REACT = 0.8;       // 看到玩家單位過河後，0.8 秒才反應（像真人一樣有反應時間）
+const AI_GIVE_UP = 4;       // 聖水不夠等太久（4 秒）就放棄防守這個威脅
+// 防守時，對付每種玩家單位要優先出哪些牌（依 README 的剋制關係）
+const AI_COUNTERS = {
+  hog:     ['cannon', 'minions', 'mage'],
+  tank:    ['minions', 'mage', 'cannon'],
+  bomb:    ['cannon', 'minions'],
+  bats:    ['mage', 'bats'],
+  minions: ['mage', 'bats'],
+  healer:  ['mage', 'bats'],
+  mage:    ['minions', 'bats'],
+};
+
+// 顏色
+const COLOR = {
+  me: '#4c8df6', meDark: '#1f4fa8', meLight: '#a9cbff', meBar: '#5aa9ff',
+  enemy: '#ef5350', enemyDark: '#a12424', enemyLight: '#ffb3b0', enemyBar: '#ff6b6b',
+};
+
+// =====================================================
+// 取得畫面元素
+// =====================================================
+const canvas = document.getElementById('arena');
+const ctx = canvas.getContext('2d');
+const handEl = document.getElementById('hand');
+const nextEl = document.getElementById('nextCard');
+const elixirBarEl = document.getElementById('elixirBar');
+const elixirNumEl = document.getElementById('elixirNum');
+const timerEl = document.getElementById('timer');
+const timeLabelEl = document.getElementById('timeLabel');
+const myCrownsEl = document.getElementById('myCrowns');
+const enemyCrownsEl = document.getElementById('enemyCrowns');
+const msgEl = document.getElementById('msg');
+const testModeEl = document.getElementById('testMode');
+const aiOnEl = document.getElementById('aiOn');
+const aiElixirEl = document.getElementById('aiElixir');
+const overlayEl = document.getElementById('overlay');
+const startScreenEl = document.getElementById('startScreen');
+const coachTextEl = document.getElementById('coachText');
+const coachEl = document.getElementById('coach');
+
+// 聖水條的 10 格
+const elixirCells = [];
+for (let i = 0; i < ELIXIR_MAX; i++) {
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  cell.innerHTML = '<i></i>';
+  elixirBarEl.appendChild(cell);
+  elixirCells.push(cell);
+}
+
+// =====================================================
+// 音效（用 Web Audio 即時合成，不需要任何音效檔）
+// =====================================================
+const SFX = { ctx: null, on: true, last: {} };
+
+// 第一次點擊時才能啟動音效（瀏覽器規定）
+function audioInit() {
+  if (!SFX.ctx) {
+    try { SFX.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { SFX.ctx = null; }
+  }
+  if (SFX.ctx && SFX.ctx.state === 'suspended') SFX.ctx.resume();
+}
+
+// 發出一個音（頻率、長度、波形、音量、滑到哪個頻率、延遲）
+function tone(freq, dur, type = 'sine', vol = 0.12, slideTo = null, delay = 0) {
+  const a = SFX.ctx;
+  const t0 = a.currentTime + delay;
+  const o = a.createOscillator();
+  const g = a.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t0);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0 + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g).connect(a.destination);
+  o.start(t0);
+  o.stop(t0 + dur + 0.02);
+}
+
+// 發出一段雜音（爆炸、打擊用）
+function noise(dur, vol = 0.15, cutoff = 1200, delay = 0) {
+  const a = SFX.ctx;
+  const t0 = a.currentTime + delay;
+  const len = Math.floor(a.sampleRate * dur);
+  const buf = a.createBuffer(1, len, a.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = a.createBufferSource();
+  src.buffer = buf;
+  const f = a.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.value = cutoff;
+  const g = a.createGain();
+  g.gain.value = vol;
+  src.connect(f).connect(g).connect(a.destination);
+  src.start(t0);
+}
+
+// 播放某種音效（同一種音效太密集時會略過，避免吵）
+function sfx(name) {
+  if (!SFX.on || !SFX.ctx) return;
+  const now = performance.now();
+  const gap = { arrow: 90, hit: 70, heal: 150, deploy: 60 }[name] || 0;
+  if (gap && now - (SFX.last[name] || 0) < gap) return;
+  SFX.last[name] = now;
+  switch (name) {
+    case 'select': tone(880, 0.06, 'triangle', 0.08); break;
+    case 'error':  tone(180, 0.15, 'square', 0.05, 120); break;
+    case 'deploy': tone(220, 0.14, 'sine', 0.18, 70); noise(0.08, 0.05, 600); break;
+    case 'arrow':  tone(1400, 0.05, 'triangle', 0.025, 700); break;
+    case 'hit':    noise(0.06, 0.06, 2500); break;
+    case 'heal':   tone(660, 0.12, 'sine', 0.06, 990); break;
+    case 'boom':   noise(0.45, 0.3, 500); tone(90, 0.4, 'sine', 0.25, 40); break;
+    case 'towerDown': noise(0.8, 0.35, 350); tone(70, 0.7, 'sine', 0.3, 30); break;
+    case 'beep':   tone(660, 0.12, 'square', 0.05); break;
+    case 'go':     tone(880, 0.25, 'square', 0.06); tone(1320, 0.3, 'square', 0.04, null, 0.08); break;
+    case 'win':    [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.25, 'triangle', 0.1, null, i * 0.12)); break;
+    case 'lose':   [392, 330, 262, 196].forEach((f, i) => tone(f, 0.3, 'triangle', 0.09, null, i * 0.15)); break;
+  }
+}
+
+document.getElementById('soundBtn').addEventListener('click', (e) => {
+  audioInit();
+  SFX.on = !SFX.on;
+  e.currentTarget.textContent = SFX.on ? '🔊 音效開' : '🔇 音效關';
+});
+
+// =====================================================
+// 遊戲狀態（全部放在 G 裡，重新開始時整個重設）
+// =====================================================
+let G = null;
+
+function newGame() {
+  G = {
+    started: false,     // 按下「開始對戰」後才開始
+    countdown: COUNTDOWN,  // 開場倒數（倒數時遊戲還沒開始）
+    elixir: ELIXIR_START,
+    timeLeft: GAME_TIME,
+    towers: makeTowers(),
+    units: [],
+    effects: [],        // 畫面特效（箭、爆炸、傷害數字）
+    particles: [],      // 粒子（煙塵、火花、碎石）
+    shake: 0,           // 畫面震動強度
+    hand: [],           // 手上 4 張
+    next: null,         // 下一張
+    queue: [],          // 牌隊（其餘的牌）
+    selected: null,     // 目前選取的手牌位置（0~3），沒選是 null
+    hover: null,        // 滑鼠在競技場上的位置（用來畫下牌預覽）
+    over: false,        // 遊戲是否結束
+    lastBeep: COUNTDOWN + 1,   // 倒數音效用
+    lastMinuteShown: false,    // 「最後一分鐘」是否提示過
+    // 結算用的統計
+    stats: { plays: 0, spent: 0, wasted: 0 },
+    // 教練提示的狀態
+    coach: {
+      seenMine: new Set(),    // 已經介紹過的自己的牌
+      seenEnemy: new Set(),   // 已經提示過的敵方牌
+      fullTime: 0,            // 聖水滿 10 持續了幾秒
+      fullWarned: false,      // 這次聖水滿有沒有提醒過
+      lastTankTime: -99,      // 敵方上次出坦克的時間（判斷坦克＋衝鋒豬配合）
+    },
+    // 電腦對手：有自己的聖水和自己的牌組（規則和玩家完全一樣）
+    ai: {
+      elixir: ELIXIR_START,
+      hand: [], next: null, queue: [],
+      timer: randRange(0.5, 2),   // 下次隨機出牌倒數（開局 5 秒後才開始倒數）
+      handled: new Set(),         // 已經處理過（防守過或放棄）的玩家單位
+    },
+  };
+  dealDeck(G);
+  dealDeck(G.ai);
+  overlayEl.hidden = true;
+  showMsg('');
+  renderHand();
+  coach('點一張牌，再點你的半場來下牌');
+}
+
+// 開始對戰（從開始畫面或「再玩一次」）
+function startGame() {
+  audioInit();
+  newGame();
+  G.started = true;
+  startScreenEl.hidden = true;
+}
+
+// =====================================================
+// 教練提示（打字效果）
+// =====================================================
+let coachCurrent = '';
+let coachTimer = null;
+function coach(text) {
+  if (coachCurrent === text) return;
+  coachCurrent = text;
+  clearInterval(coachTimer);
+  // 一個字一個字出現
+  let i = 0;
+  coachTextEl.textContent = '';
+  coachTimer = setInterval(() => {
+    i += 2;
+    coachTextEl.textContent = text.slice(0, i);
+    if (i >= text.length) clearInterval(coachTimer);
+  }, 22);
+  coachEl.classList.remove('flash');
+  void coachEl.offsetWidth;
+  coachEl.classList.add('flash');
+}
+
+// 自己出牌後的提示
+function coachAfterMyPlay(id) {
+  const c = G.coach;
+  if (G.elixir < 1) {
+    coach('花光聖水會讓你沒辦法應對，留一點');
+  } else if (!c.seenMine.has(id)) {
+    c.seenMine.add(id);
+    coach(CARD_TIPS[id]);
+  }
+}
+
+// 敵方出牌後的提示（每種牌整場只提示一次）
+function coachAfterEnemyPlay(id) {
+  const c = G.coach;
+  const elapsed = GAME_TIME - G.timeLeft;
+  if (id === 'hog' && elapsed - c.lastTankTime < 10 && !c.seenEnemy.has('combo')) {
+    c.seenEnemy.add('combo');
+    coach(COMBO_TIP);
+  } else if (ENEMY_TIPS[id] && !c.seenEnemy.has(id)) {
+    c.seenEnemy.add(id);
+    coach(ENEMY_TIPS[id]);
+  }
+  if (id === 'tank') c.lastTankTime = elapsed;
+}
+
+// 建立雙方各 3 座塔
+function makeTowers() {
+  const list = [
+    { team: 'enemy', type: 'princess', x: 90,  y: ENEMY_PRINCESS_Y },
+    { team: 'enemy', type: 'princess', x: 270, y: ENEMY_PRINCESS_Y },
+    { team: 'enemy', type: 'king',     x: 180, y: ENEMY_KING_Y },
+    { team: 'me',    type: 'princess', x: 90,  y: MY_PRINCESS_Y },
+    { team: 'me',    type: 'princess', x: 270, y: MY_PRINCESS_Y },
+    { team: 'me',    type: 'king',     x: 180, y: MY_KING_Y },
+  ];
+  for (const t of list) {
+    const s = TOWER_STATS[t.type];
+    t.hp = s.hp;
+    t.maxHp = s.hp;
+    t.dmg = s.dmg;
+    t.atk = s.atk;
+    t.range = s.range;
+    t.cd = 0;          // 攻擊冷卻倒數
+    t.alive = true;
+    t.flashUntil = 0;  // 被打到時閃白光
+  }
+  return list;
+}
+
+// 發牌：洗好 8 張，手上 4 張、第 5 張是「下一張」、剩下 3 張在牌隊
+function dealDeck(side) {
+  const deck = shuffle(DECK.slice());
+  side.hand = deck.slice(0, 4);
+  side.next = deck[4];
+  side.queue = deck.slice(5);
+}
+
+// 洗牌（Fisher-Yates）
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// =====================================================
+// 小工具
+// =====================================================
+function dist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+function nearestLane(x) {
+  return Math.abs(x - LANES[0]) <= Math.abs(x - LANES[1]) ? LANES[0] : LANES[1];
+}
+function enemyOf(team) {
+  return team === 'me' ? 'enemy' : 'me';
+}
+// 產生 a～b 之間的隨機小數
+function randRange(a, b) {
+  return a + Math.random() * (b - a);
+}
+
+// 顯示提示訊息，幾秒後自動淡出
+let msgTimer = null;
+function showMsg(text, ms = 1500) {
+  clearTimeout(msgTimer);
+  if (!text) { msgEl.classList.add('hide'); return; }
+  msgEl.textContent = text;
+  msgEl.classList.remove('hide');
+  msgTimer = setTimeout(() => msgEl.classList.add('hide'), ms);
+}
+
+// =====================================================
+// 手牌畫面
+// =====================================================
+function cardHTML(c) {
+  const long = c.name.length >= 5 ? ' long' : '';
+  return `<span class="art">${c.emoji}</span>` +
+         `<span class="name stroke${long}">${c.name}</span>`;
+}
+
+function renderHand() {
+  handEl.innerHTML = '';
+  G.hand.forEach((id, i) => {
+    const c = CARDS[id];
+    const btn = document.createElement('button');
+    btn.className = 'card role-' + c.role;
+    btn.innerHTML = cardHTML(c) + `<span class="shade"></span><span class="gem"><b>${c.cost}</b></span>`;
+    btn.addEventListener('click', () => onCardClick(i));
+    handEl.appendChild(btn);
+  });
+  const n = CARDS[G.next];
+  nextEl.className = 'role-' + n.role;
+  nextEl.innerHTML = cardHTML(n);
+  updateHandState();
+}
+
+// 依聖水和選取狀態更新手牌的外觀（每一格畫面都會呼叫）
+function updateHandState() {
+  const cards = handEl.children;
+  for (let i = 0; i < cards.length; i++) {
+    const c = CARDS[G.hand[i]];
+    const poor = Math.floor(G.elixir) < c.cost;
+    cards[i].classList.toggle('poor', poor);
+    cards[i].classList.toggle('selected', G.selected === i);
+    // 暗色遮罩高度 = 還差多少聖水（像在充能）
+    const ratio = poor ? 1 - Math.min(1, G.elixir / c.cost) : 0;
+    cards[i].querySelector('.shade').style.height = (ratio * 100) + '%';
+  }
+}
+
+// 點手牌
+function onCardClick(i) {
+  if (G.over) return;
+  audioInit();
+  // 再點一次已選的牌 → 取消選取
+  if (G.selected === i) {
+    G.selected = null;
+    updateHandState();
+    return;
+  }
+  // 聖水不夠 → 不能選，顯示提示
+  const c = CARDS[G.hand[i]];
+  if (Math.floor(G.elixir) < c.cost) {
+    showMsg('聖水不夠');
+    coach('聖水不夠，等一下再出');
+    sfx('error');
+    return;
+  }
+  G.selected = i;
+  sfx('select');
+  updateHandState();
+}
+
+// 出牌後的手牌循環（玩家 side = G，電腦 side = G.ai）：
+// 出掉的牌進牌隊尾端 → 「下一張」補進手牌 → 牌隊最前面成為新的「下一張」
+function cycleCard(side, i) {
+  const played = side.hand[i];
+  side.queue.push(played);
+  side.hand[i] = side.next;
+  side.next = side.queue.shift();
+}
+
+// =====================================================
+// 可以下牌的位置
+// =====================================================
+
+// 這個點是不是在某座還活著的塔上
+function onTower(x, y) {
+  for (const t of G.towers) {
+    const half = (t.type === 'king' ? 24 : 20) + 6;
+    if (t.alive && Math.abs(x - t.x) < half && Math.abs(y - t.y) < half) return true;
+  }
+  return false;
+}
+
+// 敵方哪幾路的公主塔已經倒了（回傳可以多下牌的區域）
+function pocketsOf(team) {
+  const foe = enemyOf(team);
+  const list = [];
+  for (const t of G.towers) {
+    if (t.team !== foe || t.type !== 'princess' || t.alive) continue;
+    const x1 = t.x < W / 2 ? 0 : W / 2;          // 那一路的半邊
+    if (team === 'me') list.push({ x1, x2: x1 + W / 2, y1: POCKET_DEPTH, y2: RIVER_Y - RIVER_HALF });
+    else list.push({ x1, x2: x1 + W / 2, y1: RIVER_Y + RIVER_HALF, y2: H - POCKET_DEPTH });
+  }
+  return list;
+}
+
+// team 能不能在 (x, y) 下牌：自己半場（含國王塔後面，不含河、不含塔上），或敵方公主塔倒掉那一路的前段
+function canDeploy(team, x, y) {
+  if (x < 8 || x > W - 8 || y < 8 || y > H - 8) return false;
+  if (onTower(x, y)) return false;
+  const ownHalf = team === 'me' ? y > RIVER_Y + RIVER_HALF : y < RIVER_Y - RIVER_HALF;
+  if (ownHalf) return true;
+  return pocketsOf(team).some(p => x >= p.x1 && x < p.x2 && y >= p.y1 && y < p.y2);
+}
+
+// =====================================================
+// 點競技場下牌
+// =====================================================
+
+// 把螢幕座標換算成競技場的邏輯座標
+function toArena(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+}
+
+canvas.addEventListener('pointermove', (e) => { if (G) G.hover = toArena(e); });
+canvas.addEventListener('pointerleave', () => { if (G) G.hover = null; });
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (!G.started || G.over) return;
+  audioInit();
+  const { x, y } = toArena(e);
+  if (e.pointerType === 'mouse') G.hover = { x, y };
+
+  if (G.selected === null) {
+    showMsg('先點一張手牌');
+    return;
+  }
+  if (G.countdown > 0) {
+    showMsg('還沒開始，等倒數結束');
+    return;
+  }
+  const id = G.hand[G.selected];
+  const c = CARDS[id];
+
+  if (canDeploy('me', x, y)) {
+    // 可以下牌的位置：下牌
+    if (Math.floor(G.elixir) < c.cost) {
+      showMsg('聖水不夠');
+      sfx('error');
+      return;
+    }
+    spawnUnits('me', id, x, y);
+    G.elixir -= c.cost;
+    G.stats.plays += 1;
+    G.stats.spent += c.cost;
+    cycleCard(G, G.selected);
+    G.selected = null;
+    renderHand();
+    coachAfterMyPlay(id);
+  } else if (testModeEl.checked && canDeploy('enemy', x, y)) {
+    // 測試模式：替敵方下牌（不扣聖水、不換手牌，選取保留方便連續測試）
+    spawnUnits('enemy', id, x, y);
+    showMsg('（測試）已替敵方下 ' + c.name);
+    coachAfterEnemyPlay(id);
+  } else if (onTower(x, y) || Math.abs(y - RIVER_Y) <= RIVER_HALF) {
+    showMsg('不能下在塔上或河裡');
+    sfx('error');
+  } else {
+    showMsg('紅色區域不能下牌');
+    sfx('error');
+  }
+});
+
+// 在點下去的位置產生單位（小兵群、蝙蝠群一次 3 隻並排）
+// 單位會打離自己最近那一路的塔
+function spawnUnits(team, id, x, y) {
+  const c = CARDS[id];
+  const lane = nearestLane(x);
+  x = Math.min(Math.max(x, 20), W - 20);   // 3 隻並排時不要超出畫面
+
+  const offsets = c.count === 3 ? [-12, 0, 12] : [0];
+  for (const off of offsets) {
+    G.units.push({
+      team, id, card: c,
+      lane,             // 要打哪一路
+      offset: off,      // 並排時的左右位移
+      x: x + off,
+      y,
+      hp: c.hp,
+      maxHp: c.hp,
+      cd: 0,            // 攻擊冷卻倒數
+      draining: false,  // 炸彈兵：是否進入倒扣血狀態
+      dead: false,
+      born: performance.now(),   // 出生時間（畫落下動畫用）
+      face: team === 'me' ? 1 : -1,   // 面向（畫圖用）
+      flashUntil: 0,    // 被打到時閃白光
+    });
+  }
+  // 落地的煙塵
+  setTimeout(() => {
+    if (!G) return;
+    emit(x, y, 14, { color: '#d9c7a0', speed: 40, life: 0.5, size: 3, up: 8 });
+    G.effects.push({ kind: 'spawn', x, y, color: team === 'me' ? COLOR.me : COLOR.enemy, t: 0.45, max: 0.45 });
+  }, 200);
+  sfx('deploy');
+}
+
+// =====================================================
+// 單位行為
+// =====================================================
+
+// 找單位要攻擊的塔：自己路線的敵方公主塔；倒了就改打國王塔
+function findTargetTower(u) {
+  const foe = enemyOf(u.team);
+  const princess = G.towers.find(t => t.team === foe && t.type === 'princess' && t.x === u.lane && t.alive);
+  if (princess) return princess;
+  return G.towers.find(t => t.team === foe && t.type === 'king' && t.alive) || null;
+}
+
+// 只打建築的單位（衝鋒豬、炸彈兵）：去打最近的敵方建築
+// （自己這一路的塔，或比塔更近的敵方砲塔 → 這就是砲塔能「吸引」它們的原因）
+function findBuildingTarget(u) {
+  let best = findTargetTower(u);
+  let bestD = best ? dist(u, best) : Infinity;
+  for (const e of G.units) {
+    if (e.dead || e.team === u.team || !e.card.building) continue;
+    const d = dist(u, e);
+    if (d < bestD) { best = e; bestD = d; }
+  }
+  return best;
+}
+
+// 目標的身體半徑（塔 35、砲塔 14）；塔沒有 card，砲塔有
+function radiusOf(t) {
+  return t.card ? CANNON_R : TOWER_HIT;
+}
+
+// 讓單位往 (tx, ty) 走一步；地面單位需要過河時先走到自己那一路的橋上
+// （空中單位和衝鋒豬可以直接過河）
+function moveToward(u, tx, ty, speed, dt) {
+  const upEdge = RIVER_Y - RIVER_HALF - 4;    // 河的上岸
+  const downEdge = RIVER_Y + RIVER_HALF + 4;  // 河的下岸
+  const goingUp = ty < RIVER_Y && u.y > upEdge + 2;
+  const goingDown = ty > RIVER_Y && u.y < downEdge - 2;
+  const freeCross = u.card.air || u.card.jumpRiver;
+  if ((goingUp || goingDown) && !freeCross) {
+    const bx = u.lane + u.offset;             // 要走的橋
+    const nearEdge = goingUp ? downEdge : upEdge;
+    const farEdge = goingUp ? upEdge : downEdge;
+    if (Math.abs(u.x - bx) > 1) {
+      // 還沒對準橋：先走到橋頭
+      tx = bx;
+      ty = (u.y > upEdge && u.y < downEdge) ? u.y : nearEdge;
+    } else {
+      // 已經在橋上：直直走到對岸
+      tx = bx;
+      ty = farEdge;
+    }
+  }
+  const d = Math.hypot(tx - u.x, ty - u.y);
+  if (d < 0.01) return;
+  const step = Math.min(d, speed * dt);
+  u.x += (tx - u.x) / d * step;
+  u.y += (ty - u.y) / d * step;
+}
+
+// 找 reach 範圍內最近、而且打得到的敵方單位
+// 只打塔的單位（衝鋒豬）、炸彈兵、治療師不會攻擊單位
+function findUnitTarget(u, reach) {
+  if (u.card.buildingsOnly || u.card.bomb || u.card.healer) return null;
+  let best = null;
+  let bestD = Infinity;
+  for (const e of G.units) {
+    if (e.dead || e.team === u.team) continue;
+    if (e.card.air && !u.card.hitsAir) continue;   // 近戰地面單位打不到空中
+    const d = dist(u, e);
+    if (d <= reach + UNIT_R && d < bestD) { best = e; bestD = d; }
+  }
+  return best;
+}
+
+// 攻擊一個敵方單位（法師有範圍傷害：目標周圍 30 內的敵方單位都受傷）
+function attackUnit(u, e) {
+  if (u.card.splash) {
+    for (const o of G.units) {
+      if (!o.dead && o.team !== u.team && dist(o, e) <= u.card.splash) damageUnit(o, u.card.dmg, false);
+    }
+    G.effects.push({ kind: 'orb', x1: u.x, y1: u.y - 6, x2: e.x, y2: e.y, t: 0.2, max: 0.2 });
+    G.effects.push({ kind: 'splash', x: e.x, y: e.y, t: 0.35, max: 0.35 });
+  } else {
+    damageUnit(e, u.card.dmg, false);
+    meleeFx(u, e.x, e.y);
+  }
+}
+
+// 近戰打擊的火花＋音效
+function meleeFx(u, x, y) {
+  emit((u.x + x) / 2, (u.y + y) / 2, 5, { color: '#fff2b0', speed: 70, life: 0.25, size: 2 });
+  sfx('hit');
+}
+
+// 攻擊建築（塔或砲塔）（法師的範圍傷害也會打到旁邊的敵方單位）
+function attackTower(u, t) {
+  if (t.card) {
+    // 砲塔是放在 G.units 裡的建築
+    if (u.card.splash) attackUnit(u, t);
+    else {
+      damageUnit(t, u.card.dmg, false);
+      meleeFx(u, t.x, t.y);
+    }
+    return;
+  }
+  damageTower(t, u.card.dmg);
+  if (u.card.splash) {
+    for (const o of G.units) {
+      if (!o.dead && o.team !== u.team && dist(o, t) <= TOWER_HIT + u.card.splash) damageUnit(o, u.card.dmg, false);
+    }
+    G.effects.push({ kind: 'orb', x1: u.x, y1: u.y - 6, x2: t.x, y2: t.y, t: 0.2, max: 0.2 });
+    G.effects.push({ kind: 'splash', x: t.x, y: t.y, t: 0.35, max: 0.35 });
+  } else {
+    meleeFx(u, t.x, t.y);
+  }
+}
+
+// 遠程治療師：治療射程內「血量比例最低」的受傷友軍（不含自己、不含塔）
+function tryHeal(u) {
+  if (u.cd > 0) return;
+  let best = null;
+  let bestRatio = 1;
+  for (const f of G.units) {
+    if (f === u || f.dead || f.team !== u.team || f.hp >= f.maxHp || f.card.building) continue;
+    if (dist(u, f) > u.card.range + UNIT_R) continue;
+    const ratio = f.hp / f.maxHp;
+    if (ratio < bestRatio) { best = f; bestRatio = ratio; }
+  }
+  if (best) {
+    const amount = Math.min(u.card.heal, best.maxHp - best.hp);   // 不超過血量上限
+    best.hp += amount;
+    u.cd = u.card.atk;
+    // 綠線：讓玩家看得出在補誰
+    G.effects.push({ kind: 'heal', src: u, dst: best, t: 0.5, max: 0.5 });
+    G.effects.push({ kind: 'num', x: best.x, y: best.y - 18, text: '+' + Math.round(amount), color: '#6dff9a', t: 0.8, max: 0.8 });
+    emit(best.x, best.y, 5, { color: '#6dff9a', speed: 20, life: 0.6, size: 2.5, up: 30 });
+    sfx('heal');
+  }
+}
+
+function updateUnit(u, dt) {
+  u.cd = Math.max(0, u.cd - dt);
+
+  // --- 砲塔：不會動，血量隨時間減少；射程內有敵方地面單位就打 ---
+  if (u.card.building) {
+    u.hp -= u.maxHp / u.card.lifetime * dt;
+    if (u.hp <= 0) { u.dead = true; return; }
+    const foe = findUnitTarget(u, u.card.range);
+    if (foe) {
+      u.aim = Math.atan2(foe.y - u.y, foe.x - u.x);   // 砲管轉向目標
+      if (u.cd <= 0) {
+        damageUnit(foe, u.card.dmg, false);
+        u.cd = u.card.atk;
+        u.recoil = performance.now();
+        G.effects.push({ kind: 'ball', x1: u.x, y1: u.y, x2: foe.x, y2: foe.y, t: 0.15, max: 0.15 });
+        sfx('hit');
+      }
+    }
+    return;
+  }
+
+  // 只打建築的單位找最近的建築；其他單位找自己這一路的塔
+  const target = (u.card.buildingsOnly || u.card.bomb) ? findBuildingTarget(u) : findTargetTower(u);
+  if (!target) return;
+  const d = dist(u, target);
+  const tr = radiusOf(target);
+  // 走向目標：塔的話走自己並排的位置，砲塔的話直接走過去
+  const tx = target.card ? target.x : target.x + u.offset;
+
+  // --- 遠程治療師：治療友軍；跟著最近的友軍走，沒有友軍就像一般單位一樣往敵方塔前進 ---
+  if (u.card.healer) {
+    tryHeal(u);
+    let best = null;
+    for (const f of G.units) {
+      if (f.team !== u.team || f.dead || f.card.healer || f.card.building) continue;
+      if (!best || dist(u, f) < dist(u, best)) best = f;
+    }
+    if (best) {
+      // 跟在友軍後方約 60 px（「後方」= 往自己陣地的方向）
+      const back = u.team === 'me' ? HEALER_FOLLOW : -HEALER_FOLLOW;
+      moveToward(u, best.x, best.y + back, u.card.speed, dt);
+    } else if (d > tr + u.card.range) {
+      // 沒有友軍：往敵方塔走，走到塔的射程內才停（對方可以把它解掉）
+      moveToward(u, tx, target.y, u.card.speed, dt);
+    }
+    return;
+  }
+
+  // --- 炸彈兵：被塔打到後倒扣血＋加速；到塔就自爆 ---
+  if (u.card.bomb) {
+    let speed = u.card.speed;
+    if (u.draining) {
+      speed *= BOMB.boostMul;
+      u.hp -= BOMB.drainPerSec * dt;
+      if (u.hp <= 0) { explode(u); return; }
+      // 引信火花
+      if (Math.random() < 0.5) emit(u.x + 6, u.y - 14, 1, { color: '#ffcc33', speed: 30, life: 0.3, size: 2 });
+    }
+    if (d <= tr) { explode(u); return; }
+    moveToward(u, tx, target.y, speed, dt);
+    return;
+  }
+
+  // --- 一般單位：射程內有敵方單位就先打單位（停下來打） ---
+  const foe = findUnitTarget(u, u.card.range);
+  if (foe) {
+    if (u.cd <= 0) {
+      attackUnit(u, foe);
+      u.cd = u.card.atk;
+    }
+    return;
+  }
+
+  // --- 沒有敵方單位在射程內：在射程內就打塔（或砲塔） ---
+  if (d <= tr + u.card.range) {
+    if (u.cd <= 0) {
+      attackTower(u, target);
+      u.cd = u.card.atk;
+    }
+    return;
+  }
+
+  // --- 索敵範圍內有敵方單位：追過去；沒有就往塔前進 ---
+  const seen = findUnitTarget(u, Math.max(SIGHT, u.card.range));
+  if (seen) moveToward(u, seen.x, seen.y, u.card.speed, dt);
+  else moveToward(u, tx, target.y, u.card.speed, dt);
+}
+
+// 單位受到傷害（byTower：是不是被塔打的）
+function damageUnit(u, dmg, byTower) {
+  if (u.dead) return;
+  u.hp -= dmg;
+  u.flashUntil = performance.now() + 90;
+  // 炸彈兵只有被「塔」打到才開始倒扣血並加速（被單位打不會，這樣才攔得住它）
+  if (u.card.bomb && byTower) u.draining = true;
+  if (u.hp <= 0) {
+    if (u.card.bomb) explode(u);   // 炸彈兵被擊殺也會爆
+    else u.dead = true;
+  }
+}
+
+// 炸彈兵自爆：半徑 40 內的敵方塔受 300、敵方地面單位受 150，不傷己方
+function explode(u) {
+  if (u.dead) return;
+  u.dead = true;
+  u.hp = 0;
+  G.effects.push({ kind: 'boom', x: u.x, y: u.y, t: 0.5, max: 0.5 });
+  emit(u.x, u.y, 22, { color: '#ff9a2e', speed: 120, life: 0.45, size: 3.5 });
+  emit(u.x, u.y, 10, { color: '#6b6158', speed: 50, life: 0.9, size: 6, up: 20 });
+  G.shake = Math.max(G.shake, 6);
+  sfx('boom');
+  for (const t of G.towers) {
+    if (t.team !== u.team && t.alive && dist(u, t) - TOWER_HIT <= BOMB.radius) {
+      damageTower(t, BOMB.towerDmg);
+    }
+  }
+  for (const o of G.units) {
+    if (o.dead || o.team === u.team || o.card.air) continue;
+    if (o.card.building) {
+      // 砲塔是建築：和塔一樣受 300，範圍從砲塔邊緣算
+      if (dist(u, o) - CANNON_R <= BOMB.radius) damageUnit(o, BOMB.towerDmg, false);
+    } else if (dist(u, o) <= BOMB.radius) {
+      damageUnit(o, BOMB.unitDmg, false);
+    }
+  }
+}
+
+// =====================================================
+// 塔的行為
+// =====================================================
+
+// 塔攻擊範圍內最近的敵方單位（地面空中都打）
+function updateTower(t, dt) {
+  if (!t.alive) return;
+  t.cd = Math.max(0, t.cd - dt);
+  if (t.cd > 0) return;
+  let best = null;
+  let bestD = Infinity;
+  for (const u of G.units) {
+    if (u.dead || u.team === t.team) continue;
+    const d = dist(t, u);
+    if (d <= t.range && d < bestD) { best = u; bestD = d; }
+  }
+  if (best) {
+    // 塔射出一支箭（畫面特效），傷害立刻生效
+    G.effects.push({ kind: 'arrow', x1: t.x, y1: t.y - 20, x2: best.x, y2: best.y - (best.card.air ? 10 : 0), t: 0.18, max: 0.18 });
+    damageUnit(best, t.dmg, true);
+    t.cd = t.atk;
+    sfx('arrow');
+  }
+}
+
+// 塔受到傷害
+function damageTower(t, dmg) {
+  if (!t.alive || G.over) return;
+  t.hp -= dmg;
+  t.flashUntil = performance.now() + 100;
+  G.effects.push({ kind: 'num', x: t.x + randRange(-10, 10), y: t.y - 14, text: '-' + dmg, color: '#ffffff', t: 0.8, max: 0.8 });
+  if (t.hp <= 0) {
+    t.hp = 0;
+    t.alive = false;
+    G.effects.push({ kind: 'boom', x: t.x, y: t.y, t: 0.7, max: 0.7 });
+    emit(t.x, t.y, 30, { color: '#a59d8e', speed: 130, life: 0.9, size: 4, gravity: 160 });
+    emit(t.x, t.y, 16, { color: '#5f574e', speed: 40, life: 1.4, size: 9, up: 25 });
+    G.shake = Math.max(G.shake, 11);
+    sfx('towerDown');
+    // 國王塔倒 → 對方立刻獲勝
+    if (t.type === 'king') {
+      endGame(t.team === 'enemy' ? 'win' : 'lose', t.team === 'enemy' ? '你摧毀了敵方國王塔！' : '我方國王塔被摧毀了…');
+    } else {
+      showMsg(t.team === 'enemy' ? '摧毀敵方公主塔！' : '我方公主塔被摧毀了');
+      if (t.team === 'enemy') coach('這條路的公主塔倒了，現在可以集中打國王塔');
+    }
+  }
+}
+
+// =====================================================
+// 電腦對手
+// =====================================================
+
+// 電腦出一張牌：扣自己的聖水、手牌循環（規則和玩家一樣）
+function aiPlay(handIndex, x, y) {
+  const ai = G.ai;
+  const id = ai.hand[handIndex];
+  ai.elixir -= CARDS[id].cost;
+  cycleCard(ai, handIndex);
+  spawnUnits('enemy', id, x, y);
+  coachAfterEnemyPlay(id);
+}
+
+// 從想要的位置開始，往自己後方找一個可以下牌的點
+function aiFindSpot(x, y) {
+  x = Math.min(Math.max(x, 20), W - 20);
+  for (let k = 0; k < 15; k++) {
+    const ty = Math.min(y - k * 15, RIVER_Y - RIVER_HALF - 6);
+    if (ty < 10) break;
+    if (canDeploy('enemy', x, ty)) return { x, y: ty };
+  }
+  // 找不到就下在那一路的河邊
+  return { x: nearestLane(x), y: RIVER_Y - 40 };
+}
+
+// 防守：玩家單位過河後，挑剋制它的牌，下在它和塔之間
+// 回傳 true 表示這個威脅處理完了（出牌或放棄）
+function aiDefend(threat, elapsed) {
+  const ai = G.ai;
+  const counters = AI_COUNTERS[threat.id] || [];
+  let waiting = false;
+  for (const id of counters) {
+    const idx = ai.hand.indexOf(id);
+    if (idx < 0) continue;
+    if (Math.floor(ai.elixir) >= CARDS[id].cost) {
+      let spot;
+      if (id === 'cannon') {
+        // 砲塔放在威脅和中線之間，把衝鋒豬、炸彈兵引過來
+        spot = aiFindSpot((threat.x + W / 2) / 2, threat.y - 70);
+      } else {
+        // 遠程單位（法師）站遠一點，近戰單位擋在正前方
+        const gap = CARDS[id].range > MELEE ? 90 : 45;
+        spot = aiFindSpot(threat.x, threat.y - gap);
+      }
+      aiPlay(idx, spot.x, spot.y);
+      return true;
+    }
+    waiting = true;   // 有剋制牌但聖水不夠 → 等一下
+  }
+  // 沒有剋制牌，或等太久了 → 放棄，交給塔處理
+  return !waiting || elapsed - threat.seenAt > AI_GIVE_UP;
+}
+
+// 隨機出牌：從負擔得起的手牌隨機挑一張，隨機一路，下在自己半場
+function aiRandomPlay() {
+  const ai = G.ai;
+  const can = [];
+  ai.hand.forEach((id, i) => { if (Math.floor(ai.elixir) >= CARDS[id].cost) can.push(i); });
+  if (can.length === 0) return;
+  const idx = can[Math.floor(Math.random() * can.length)];
+  const lane = LANES[Math.floor(Math.random() * 2)];
+  // 砲塔放在中間附近，其他牌放在隨機一路
+  const spot = ai.hand[idx] === 'cannon'
+    ? aiFindSpot(W / 2 + randRange(-30, 30), RIVER_Y - 90)
+    : aiFindSpot(lane + randRange(-15, 15), randRange(RIVER_Y - 100, RIVER_Y - 30));
+  aiPlay(idx, spot.x, spot.y);
+}
+
+function updateAI(dt) {
+  const ai = G.ai;
+  // 聖水回復（和玩家一樣）
+  ai.elixir = Math.min(ELIXIR_MAX, ai.elixir + dt / ELIXIR_REGEN);
+  if (!aiOnEl.checked) return;
+  const elapsed = GAME_TIME - G.timeLeft;
+  if (elapsed < AI_START_DELAY) return;   // 開局前 5 秒不出牌
+
+  // 1. 防守：找已經過河、還沒處理過的玩家單位，挑最靠近塔的
+  let threat = null;
+  for (const u of G.units) {
+    if (u.team !== 'me' || u.dead || u.y >= RIVER_Y || ai.handled.has(u)) continue;
+    if (u.seenAt === undefined) u.seenAt = elapsed;   // 記住第一次看到的時間
+    if (!threat || u.y < threat.y) threat = u;
+  }
+  if (threat && elapsed - threat.seenAt >= AI_REACT) {
+    if (aiDefend(threat, elapsed)) {
+      // 同一批出的（例如小兵群 3 隻）一起算處理過
+      for (const u of G.units) {
+        if (u.team === 'me' && u.id === threat.id && dist(u, threat) < 40) ai.handled.add(u);
+      }
+    }
+    return;   // 正在防守時不隨機出牌
+  }
+
+  // 2. 沒有威脅時，每 3～6 秒隨機出一張
+  ai.timer -= dt;
+  if (ai.timer <= 0) {
+    aiRandomPlay();
+    ai.timer = randRange(AI_MIN_GAP, AI_MAX_GAP);
+  }
+}
+
+// =====================================================
+// 勝負判定
+// =====================================================
+
+// 某一方摧毀了幾座敵方的塔
+function killsBy(team) {
+  return G.towers.filter(t => t.team !== team && !t.alive).length;
+}
+// 某一方剩餘塔血總和
+function towerHpSum(team) {
+  return G.towers.filter(t => t.team === team).reduce((s, t) => s + t.hp, 0);
+}
+
+// 時間到：先比摧毀塔數，再比剩餘塔血，都一樣才平手
+function judgeByTime() {
+  const mine = killsBy('me');
+  const theirs = killsBy('enemy');
+  if (mine !== theirs) {
+    endGame(mine > theirs ? 'win' : 'lose', `時間到！摧毀塔數 ${mine} : ${theirs}`);
+    return;
+  }
+  const myHp = towerHpSum('me');
+  const enemyHp = towerHpSum('enemy');
+  const reason = `時間到！摧毀塔數相同，比剩餘塔血：我方 ${Math.round(myHp)}、敵方 ${Math.round(enemyHp)}`;
+  if (myHp > enemyHp) endGame('win', reason);
+  else if (myHp < enemyHp) endGame('lose', reason);
+  else endGame('draw', reason);
+}
+
+// 皇冠圖示（摧毀幾座就亮幾個）
+function crownsHTML(n) {
+  let s = '';
+  for (let i = 0; i < 3; i++) s += `<span class="${i < n ? 'on' : ''}">👑</span>`;
+  return s;
+}
+
+function endGame(result, reason) {
+  if (G.over) return;
+  G.over = true;
+  G.selected = null;
+  updateHandState();
+  sfx(result === 'lose' ? 'lose' : 'win');
+  const titleEl = document.getElementById('resultTitle');
+  titleEl.textContent = { win: '勝利', lose: '落敗', draw: '平手' }[result];
+  titleEl.className = 'ribbon ' + result;
+  document.getElementById('resultCrowns').innerHTML =
+    `<div><div class="side">你</div><div class="crowns">${crownsHTML(killsBy('me'))}</div></div>` +
+    `<div class="vs">VS</div>` +
+    `<div><div class="side">電腦</div><div class="crowns">${crownsHTML(killsBy('enemy'))}</div></div>`;
+  document.getElementById('resultReason').textContent = reason;
+
+  // 出牌統計與建議
+  const st = G.stats;
+  const avg = st.plays > 0 ? st.spent / st.plays : 0;
+  const deckAvg = DECK.reduce((s, id) => s + CARDS[id].cost, 0) / DECK.length;
+  let advice;
+  if (st.wasted > 5) advice = '你浪費了不少聖水，聖水滿的時候要記得出牌';
+  else if (avg > 4) advice = '你的出牌偏貴，可以多搭配便宜的牌';
+  else advice = '聖水運用得不錯，繼續保持';
+  document.getElementById('resultDetail').innerHTML =
+    `<table class="stats">` +
+    `<tr><td>摧毀塔數</td><td>你 ${killsBy('me')} ： 電腦 ${killsBy('enemy')}</td></tr>` +
+    `<tr><td>出牌次數</td><td>${st.plays} 張</td></tr>` +
+    `<tr><td>總花費聖水</td><td>${st.spent}</td></tr>` +
+    `<tr><td>浪費聖水</td><td>${st.wasted.toFixed(1)}</td></tr>` +
+    `<tr><td>平均每張費用</td><td>${avg.toFixed(1)}（牌組平均 ${deckAvg.toFixed(2)}）</td></tr>` +
+    `</table>` +
+    `<div class="advice"><span>🧑‍🏫</span>${advice}</div>`;
+  // 等爆炸特效播一下再跳出結算
+  setTimeout(() => { overlayEl.hidden = false; }, 700);
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('againBtn').addEventListener('click', startGame);
+document.getElementById('menuBtn').addEventListener('click', () => {
+  newGame();
+  startScreenEl.hidden = false;
+});
+
+// 測試用：把時間跳到剩 10 秒
+document.getElementById('skipTimeBtn').addEventListener('click', () => {
+  if (!G.over) { G.countdown = 0; G.timeLeft = Math.min(G.timeLeft, 10); }
+});
+
+// =====================================================
+// 粒子（煙塵、火花、碎石）
+// =====================================================
+// opt：color 顏色、speed 速度、life 存活秒數、size 大小、up 往上飄的速度、gravity 重力
+function emit(x, y, n, opt) {
+  if (!G) return;
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = opt.speed * (0.4 + Math.random() * 0.6);
+    G.particles.push({
+      x, y,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp * 0.6 - (opt.up || 0),
+      life: opt.life * (0.6 + Math.random() * 0.4),
+      max: opt.life,
+      size: opt.size * (0.6 + Math.random() * 0.6),
+      color: opt.color,
+      gravity: opt.gravity || 0,
+    });
+  }
+}
+
+function updateParticles(dt) {
+  for (const p of G.particles) {
+    p.life -= dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += p.gravity * dt;
+    p.vx *= 0.94;
+    p.vy *= p.gravity ? 1 : 0.94;
+  }
+  G.particles = G.particles.filter(p => p.life > 0);
+  G.shake *= 0.86;
+  if (G.shake < 0.2) G.shake = 0;
+}
+
+// =====================================================
+// 每一格畫面的更新
+// =====================================================
+function update(dt) {
+  if (!G.started || G.over) return;
+
+  // 特效倒數
+  for (const e of G.effects) e.t -= dt;
+  G.effects = G.effects.filter(e => e.t > 0);
+
+  // 開場倒數：倒數時不回聖水、不計時
+  if (G.countdown > 0) {
+    G.countdown -= dt;
+    const n = Math.ceil(G.countdown);
+    if (n < G.lastBeep && n > 0) { G.lastBeep = n; sfx('beep'); }
+    if (G.countdown <= 0) {
+      G.effects.push({ kind: 'banner', text: '開戰！', t: 0.9, max: 0.9 });
+      sfx('go');
+    }
+    return;
+  }
+
+  // 聖水回復（上限 10）；超過上限的部分算「浪費」
+  const raw = G.elixir + dt / ELIXIR_REGEN;
+  G.elixir = Math.min(ELIXIR_MAX, raw);
+  G.stats.wasted += raw - G.elixir;
+
+  // 聖水滿 10 超過 2 秒 → 教練提醒（每次滿只提醒一次）
+  if (G.elixir >= ELIXIR_MAX) {
+    G.coach.fullTime += dt;
+    if (G.coach.fullTime > 2 && !G.coach.fullWarned) {
+      G.coach.fullWarned = true;
+      coach('聖水滿了會浪費，趕快出牌');
+    }
+  } else {
+    G.coach.fullTime = 0;
+    G.coach.fullWarned = false;
+  }
+
+  // 倒數計時
+  G.timeLeft -= dt;
+  if (G.timeLeft <= 60 && !G.lastMinuteShown) {
+    G.lastMinuteShown = true;
+    G.effects.push({ kind: 'banner', text: '最後一分鐘', t: 1.4, max: 1.4 });
+    sfx('beep');
+  }
+  if (G.timeLeft <= 0) {
+    G.timeLeft = 0;
+    judgeByTime();
+    return;
+  }
+
+  updateAI(dt);
+  for (const u of G.units) if (!u.dead) updateUnit(u, dt);
+  for (const t of G.towers) updateTower(t, dt);
+
+  // 移除死掉的單位（死掉時冒一團煙）
+  for (const u of G.units) {
+    if (u.dead && !u.card.bomb) emit(u.x, u.y, 8, { color: '#e8e8e8', speed: 35, life: 0.5, size: 5, up: 15 });
+  }
+  G.units = G.units.filter(u => !u.dead);
+}
+
+// 更新 HTML 介面（聖水、時間、皇冠、手牌）
+function updateUI() {
+  for (let i = 0; i < ELIXIR_MAX; i++) {
+    const fill = Math.max(0, Math.min(1, G.elixir - i));
+    elixirCells[i].firstChild.style.width = (fill * 100) + '%';
+    elixirCells[i].classList.toggle('part', fill > 0 && fill < 1);
+  }
+  elixirBarEl.classList.toggle('full', G.elixir >= ELIXIR_MAX);
+  elixirNumEl.textContent = Math.floor(G.elixir);
+  const s = Math.ceil(G.timeLeft);
+  timerEl.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  timerEl.classList.toggle('hurry', s <= 60 && !G.over);
+  timeLabelEl.textContent = s <= 60 ? '最後一分鐘' : '剩餘時間';
+  const mk = killsBy('me');
+  const ek = killsBy('enemy');
+  if (myCrownsEl.dataset.n !== String(mk)) { myCrownsEl.innerHTML = crownsHTML(mk); myCrownsEl.dataset.n = mk; }
+  if (enemyCrownsEl.dataset.n !== String(ek)) { enemyCrownsEl.innerHTML = crownsHTML(ek); enemyCrownsEl.dataset.n = ek; }
+  aiElixirEl.textContent = Math.floor(G.ai.elixir);
+  updateHandState();
+}
+
+// =====================================================
+// 繪圖：靜態背景（只畫一次，存在另一張畫布）
+// =====================================================
+const BG_SCALE = 3;   // 背景用 3 倍解析度畫，縮放後才清楚
+const bgCanvas = document.createElement('canvas');
+const vignetteCanvas = document.createElement('canvas');
+
+// 固定種子的亂數（每次開都長一樣，裝飾不會亂跳）
+function seeded(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// 在指定畫布上畫圓角矩形路徑
+function rr(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+function buildBackground() {
+  bgCanvas.width = W * BG_SCALE;
+  bgCanvas.height = H * BG_SCALE;
+  const c = bgCanvas.getContext('2d');
+  c.scale(BG_SCALE, BG_SCALE);
+  const rnd = seeded(20261016);
+
+  // 草地底色＋割草條紋
+  c.fillStyle = '#5aa843';
+  c.fillRect(0, 0, W, H);
+  for (let y = 0; y < H; y += 40) {
+    c.fillStyle = 'rgba(255,255,255,0.045)';
+    c.fillRect(0, y, W, 20);
+  }
+  // 草葉紋理（很多小短線）
+  for (let i = 0; i < 9000; i++) {
+    const x = rnd() * W, y = rnd() * H;
+    c.strokeStyle = rnd() < 0.5 ? 'rgba(30,80,20,0.18)' : 'rgba(170,230,120,0.14)';
+    c.lineWidth = 0.6;
+    c.beginPath();
+    c.moveTo(x, y);
+    c.lineTo(x + (rnd() - 0.5) * 1.5, y - 1.5 - rnd() * 2);
+    c.stroke();
+  }
+
+  // 土路（兩條直路＋國王塔前的橫路）
+  const pathColor = '#cda56a';
+  const pathEdge = '#9e7a45';
+  function pathRect(x, y, w, h, r) {
+    rr(c, x - 1.5, y - 1.5, w + 3, h + 3, r + 1.5);
+    c.fillStyle = pathEdge;
+    c.fill();
+    rr(c, x, y, w, h, r);
+    c.fillStyle = pathColor;
+    c.fill();
+  }
+  for (const lx of LANES) pathRect(lx - 15, ENEMY_KING_Y - 10, 30, MY_KING_Y - ENEMY_KING_Y + 20, 12);
+  pathRect(LANES[0], ENEMY_KING_Y - 10, LANES[1] - LANES[0], 20, 8);
+  pathRect(LANES[0], MY_KING_Y - 10, LANES[1] - LANES[0], 20, 8);
+  for (const lx of LANES) {
+    rr(c, lx - 15, ENEMY_KING_Y - 10, 30, MY_KING_Y - ENEMY_KING_Y + 20, 12);
+    c.fillStyle = pathColor;
+    c.fill();
+  }
+  // 土路上的小石子和車痕
+  for (let i = 0; i < 700; i++) {
+    const lx = LANES[i % 2];
+    const x = lx + (rnd() - 0.5) * 26;
+    const y = ENEMY_KING_Y + rnd() * (MY_KING_Y - ENEMY_KING_Y);
+    c.fillStyle = rnd() < 0.5 ? 'rgba(120,85,40,0.35)' : 'rgba(255,240,200,0.35)';
+    c.beginPath();
+    c.ellipse(x, y, 0.6 + rnd() * 1.2, 0.5 + rnd(), 0, 0, Math.PI * 2);
+    c.fill();
+  }
+
+  // 塔的石頭地基
+  for (const t of makeTowers()) {
+    const s = (t.type === 'king' ? 50 : 42) + 18;
+    rr(c, t.x - s / 2, t.y - s / 2 + 3, s, s, 9);
+    c.fillStyle = 'rgba(0,0,0,0.25)';
+    c.fill();
+    rr(c, t.x - s / 2, t.y - s / 2, s, s, 9);
+    const g = c.createLinearGradient(0, t.y - s / 2, 0, t.y + s / 2);
+    g.addColorStop(0, '#c9c2b2');
+    g.addColorStop(1, '#a39b8a');
+    c.fillStyle = g;
+    c.fill();
+    // 石板縫
+    c.strokeStyle = 'rgba(0,0,0,0.12)';
+    c.lineWidth = 0.8;
+    for (let k = 1; k < 4; k++) {
+      c.beginPath(); c.moveTo(t.x - s / 2 + 3, t.y - s / 2 + k * s / 4); c.lineTo(t.x + s / 2 - 3, t.y - s / 2 + k * s / 4); c.stroke();
+    }
+  }
+
+  // 河岸（沙地）
+  const bank = c.createLinearGradient(0, RIVER_Y - RIVER_HALF - 6, 0, RIVER_Y + RIVER_HALF + 6);
+  bank.addColorStop(0, '#c9b37a');
+  bank.addColorStop(1, '#b49a5e');
+  c.fillStyle = bank;
+  c.fillRect(0, RIVER_Y - RIVER_HALF - 5, W, RIVER_HALF * 2 + 10);
+
+  // 裝飾：樹叢、石頭、小花（只放在兩側邊緣和角落，不擋路）
+  function bush(x, y, r) {
+    c.fillStyle = 'rgba(0,0,0,0.22)';
+    c.beginPath(); c.ellipse(x + 2, y + r * 0.7, r * 1.2, r * 0.45, 0, 0, Math.PI * 2); c.fill();
+    const blobs = [[0, 0, 1], [-0.6, 0.15, 0.7], [0.6, 0.15, 0.7], [0, -0.45, 0.65]];
+    for (const [dx, dy, s] of blobs) {
+      const g = c.createRadialGradient(x + dx * r - r * 0.2, y + dy * r - r * 0.3, 1, x + dx * r, y + dy * r, r * s);
+      g.addColorStop(0, '#7fd05a');
+      g.addColorStop(1, '#2f7a28');
+      c.fillStyle = g;
+      c.beginPath(); c.arc(x + dx * r, y + dy * r, r * s, 0, Math.PI * 2); c.fill();
+    }
+  }
+  function rock(x, y, r) {
+    c.fillStyle = 'rgba(0,0,0,0.22)';
+    c.beginPath(); c.ellipse(x + 1.5, y + r * 0.6, r, r * 0.4, 0, 0, Math.PI * 2); c.fill();
+    const g = c.createLinearGradient(x, y - r, x, y + r);
+    g.addColorStop(0, '#c3c0b8');
+    g.addColorStop(1, '#7c7870');
+    c.fillStyle = g;
+    c.beginPath();
+    c.moveTo(x - r, y + r * 0.4);
+    c.lineTo(x - r * 0.7, y - r * 0.5);
+    c.lineTo(x + r * 0.1, y - r * 0.8);
+    c.lineTo(x + r, y - r * 0.2);
+    c.lineTo(x + r * 0.8, y + r * 0.5);
+    c.closePath();
+    c.fill();
+  }
+  const decor = [
+    ['bush', 14, 40, 9], ['bush', 346, 60, 10], ['rock', 22, 250, 5], ['bush', 340, 230, 8],
+    ['bush', 16, 420, 9], ['rock', 344, 440, 6], ['bush', 344, 640, 10], ['bush', 18, 630, 8],
+    ['rock', 30, 120, 4], ['rock', 330, 560, 4], ['bush', 130, 22, 7], ['bush', 232, 660, 7],
+    ['rock', 236, 24, 4], ['rock', 128, 664, 4],
+  ];
+  for (const [kind, x, y, r] of decor) (kind === 'bush' ? bush : rock)(x, y, r);
+  for (let i = 0; i < 70; i++) {
+    const side = rnd() < 0.5 ? rnd() * 34 : W - rnd() * 34;
+    const y = rnd() * H;
+    if (Math.abs(y - RIVER_Y) < 22) continue;
+    c.fillStyle = ['#fff6a0', '#ffffff', '#ffb3d1'][Math.floor(rnd() * 3)];
+    c.beginPath(); c.arc(side, y, 1 + rnd() * 0.8, 0, Math.PI * 2); c.fill();
+  }
+
+  // 暗角（四周稍暗，讓視線集中在中間）
+  vignetteCanvas.width = W;
+  vignetteCanvas.height = H;
+  const v = vignetteCanvas.getContext('2d');
+  const vg = v.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.72);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.38)');
+  v.fillStyle = vg;
+  v.fillRect(0, 0, W, H);
+}
+
+// 不能下牌區域的紅色斜線花紋
+let stripePattern = null;
+function getStripePattern() {
+  if (stripePattern) return stripePattern;
+  const p = document.createElement('canvas');
+  p.width = 10; p.height = 10;
+  const pc = p.getContext('2d');
+  pc.fillStyle = 'rgba(220,40,40,0.18)';
+  pc.fillRect(0, 0, 10, 10);
+  pc.strokeStyle = 'rgba(255,80,80,0.32)';
+  pc.lineWidth = 3;
+  pc.beginPath(); pc.moveTo(-2, 12); pc.lineTo(12, -2); pc.stroke();
+  stripePattern = ctx.createPattern(p, 'repeat');
+  return stripePattern;
+}
+
+// =====================================================
+// 繪圖：每一格
+// =====================================================
+
+// 畫有黑邊的文字
+function outlinedText(text, x, y, size, color, stroke = 'rgba(0,0,0,0.85)') {
+  ctx.font = `900 ${size}px "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(2.5, size / 5);
+  ctx.strokeStyle = stroke;
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+}
+
+// 畫 emoji（置中）
+// 注意：canvas 畫 emoji 會套用 fillStyle 的透明度，所以先設成不透明，不然會變半透明
+function emoji(ch, x, y, size) {
+  ctx.font = `${size}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#000';
+  ctx.fillText(ch, x, y);
+}
+
+// 河水和橋（每格都畫，河水會流動）
+function drawWater() {
+  const top = RIVER_Y - RIVER_HALF;
+  const g = ctx.createLinearGradient(0, top, 0, top + RIVER_HALF * 2);
+  g.addColorStop(0, '#3fb0f0');
+  g.addColorStop(0.5, '#2a90dc');
+  g.addColorStop(1, '#1f78c4');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, top, W, RIVER_HALF * 2);
+  // 流動的亮紋
+  const t = performance.now() / 1000;
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 1.2;
+  for (let i = 0; i < 9; i++) {
+    const x = ((i * 47 + t * 18) % (W + 40)) - 20;
+    const y = top + 5 + (i % 3) * 6;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.quadraticCurveTo(x + 6, y - 2, x + 12, y);
+    ctx.stroke();
+  }
+  // 岸邊的白色浪花
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  for (let x = 0; x < W; x += 6) {
+    const w = 1 + Math.sin(x * 0.7 + t * 3) * 0.8;
+    ctx.fillRect(x, top, 4, w);
+    ctx.fillRect(x + 3, top + RIVER_HALF * 2 - w, 4, w);
+  }
+  // 橋
+  for (const lx of LANES) {
+    const bx = lx - BRIDGE_HALF - 2;
+    const by = top - 8;
+    const bw = BRIDGE_HALF * 2 + 4;
+    const bh = RIVER_HALF * 2 + 16;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(bx + 2, by + 3, bw, bh);
+    ctx.fillStyle = '#9c6435';
+    ctx.fillRect(bx, by, bw, bh);
+    for (let py = by; py < by + bh; py += 5) {
+      ctx.fillStyle = (py / 5) % 2 ? '#a96f3d' : '#8f5a2f';
+      ctx.fillRect(bx + 3, py, bw - 6, 4);
+    }
+    // 欄杆
+    ctx.fillStyle = '#5a3418';
+    ctx.fillRect(bx, by - 1, 3, bh + 2);
+    ctx.fillRect(bx + bw - 3, by - 1, 3, bh + 2);
+    ctx.fillStyle = '#7a4a24';
+    for (let py = by; py <= by + bh; py += 10) {
+      ctx.fillRect(bx - 1, py, 5, 3);
+      ctx.fillRect(bx + bw - 4, py, 5, 3);
+    }
+  }
+}
+
+// 選了牌時：不能下牌的區域蓋上紅色斜線（敵方公主塔倒掉的那一路前段除外）
+function drawDeployZone() {
+  if (G.selected === null || G.over || testModeEl.checked) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, W, RIVER_Y + RIVER_HALF);
+  for (const p of pocketsOf('me')) ctx.rect(p.x1, p.y1, p.x2 - p.x1, p.y2 - p.y1);
+  ctx.fillStyle = getStripePattern();
+  ctx.fill('evenodd');
+  ctx.restore();
+  // 可以下牌的區域邊緣畫白色虛線
+  ctx.save();
+  ctx.setLineDash([7, 5]);
+  ctx.lineDashOffset = -performance.now() / 40;
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, RIVER_Y + RIVER_HALF + 1);
+  ctx.lineTo(W, RIVER_Y + RIVER_HALF + 1);
+  ctx.stroke();
+  for (const p of pocketsOf('me')) ctx.strokeRect(p.x1 + 1, p.y1, p.x2 - p.x1 - 2, p.y2 - p.y1);
+  ctx.restore();
+}
+
+// 下牌預覽：滑鼠移到競技場時，顯示單位會出現的位置
+function drawDeployPreview() {
+  if (G.selected === null || !G.hover || G.over) return;
+  const c = CARDS[G.hand[G.selected]];
+  const { x, y } = G.hover;
+  const ok = canDeploy('me', x, y) || (testModeEl.checked && canDeploy('enemy', x, y));
+  ctx.save();
+  // 遠程單位、砲塔顯示射程圈
+  if (c.range > MELEE) {
+    ctx.fillStyle = ok ? 'rgba(255,255,255,0.08)' : 'rgba(255,60,60,0.08)';
+    ctx.strokeStyle = ok ? 'rgba(255,255,255,0.6)' : 'rgba(255,80,80,0.6)';
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x, y, c.range, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.globalAlpha = 0.65;
+  const offsets = c.count === 3 ? [-12, 0, 12] : [0];
+  for (const off of offsets) {
+    ctx.fillStyle = ok ? 'rgba(255,255,255,0.85)' : 'rgba(255,70,70,0.85)';
+    ctx.beginPath();
+    ctx.ellipse(x + off, y + 6, 11, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    emoji(c.emoji, x + off, y - 3, 17);
+  }
+  ctx.globalAlpha = 1;
+  if (!ok) outlinedText('✕', x, y - 24, 18, '#ff5050');
+  ctx.restore();
+}
+
+// 血條（中間可以寫數字）
+function drawHpBar(x, y, w, h, ratio, color, label) {
+  ctx.fillStyle = 'rgba(10,12,20,0.8)';
+  rr(ctx, x - w / 2 - 1.5, y - 1.5, w + 3, h + 3, (h + 3) / 2);
+  ctx.fill();
+  if (ratio > 0) {
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(0.25, color);
+    g.addColorStop(1, color);
+    ctx.fillStyle = g;
+    rr(ctx, x - w / 2, y, Math.max(h, w * Math.min(1, ratio)), h, h / 2);
+    ctx.fill();
+  }
+  if (label !== undefined) outlinedText(label, x, y + h / 2 + 0.5, h + 1, '#fff');
+}
+
+function drawTower(t) {
+  const isMe = t.team === 'me';
+  const king = t.type === 'king';
+  const s = king ? 50 : 42;
+  const h = s / 2;
+  const now = performance.now();
+  if (!t.alive) {
+    // 已摧毀：一堆碎石，偶爾冒煙
+    const stones = [[-11, 6, 9], [9, 8, 8], [0, -4, 10], [-7, -11, 6], [13, -6, 6], [4, 12, 5]];
+    for (const [dx, dy, r] of stones) {
+      const g = ctx.createLinearGradient(0, t.y + dy - r, 0, t.y + dy + r);
+      g.addColorStop(0, '#9b958a');
+      g.addColorStop(1, '#5d5850');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(t.x + dx, t.y + dy, r, 0, Math.PI * 2); ctx.fill();
+    }
+    if (G.started && Math.random() < 0.04) emit(t.x + randRange(-8, 8), t.y - 4, 1, { color: '#6e6a64', speed: 6, life: 1.4, size: 6, up: 14 });
+    return;
+  }
+  const main = isMe ? COLOR.me : COLOR.enemy;
+  const dark = isMe ? COLOR.meDark : COLOR.enemyDark;
+  const frontH = 12;        // 正面（立體感）的高度
+  const top = t.y - h - 4;  // 塔頂面上緣
+
+  // 陰影
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath(); ctx.ellipse(t.x + 5, t.y + h + 2, h + 4, 7, 0, 0, Math.PI * 2); ctx.fill();
+  // 正面（較暗的石牆）
+  const fg = ctx.createLinearGradient(0, t.y + h - frontH, 0, t.y + h + 2);
+  fg.addColorStop(0, '#9c958a');
+  fg.addColorStop(1, '#6f695f');
+  ctx.fillStyle = fg;
+  rr(ctx, t.x - h, t.y + h - frontH, s, frontH + 2, 4);
+  ctx.fill();
+  // 頂面（較亮的石板）
+  const tg = ctx.createLinearGradient(0, top, 0, t.y + h - frontH);
+  tg.addColorStop(0, '#efe9dc');
+  tg.addColorStop(1, '#cfc7b7');
+  ctx.fillStyle = tg;
+  rr(ctx, t.x - h, top, s, s - frontH + 4, 5);
+  ctx.fill();
+  // 石磚縫
+  ctx.strokeStyle = 'rgba(80,70,55,0.18)';
+  ctx.lineWidth = 0.8;
+  for (let ly = top + 14; ly < t.y + h - frontH; ly += 8) {
+    ctx.beginPath(); ctx.moveTo(t.x - h + 3, ly); ctx.lineTo(t.x + h - 3, ly); ctx.stroke();
+  }
+  // 正面的石磚
+  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+  for (let lx = t.x - h + 8; lx < t.x + h; lx += 9) {
+    ctx.beginPath(); ctx.moveTo(lx, t.y + h - frontH + 1); ctx.lineTo(lx, t.y + h + 1); ctx.stroke();
+  }
+  // 城垛（隊伍顏色）
+  ctx.fillStyle = dark;
+  rr(ctx, t.x - h - 2, top - 1, s + 4, 11, 3);
+  ctx.fill();
+  ctx.fillStyle = main;
+  rr(ctx, t.x - h - 2, top - 2, s + 4, 9, 3);
+  ctx.fill();
+  const n = king ? 5 : 4;
+  const cw = (s + 4) / (n * 2 - 1);
+  for (let i = 0; i < n; i++) {
+    const cx = t.x - h - 2 + i * cw * 2;
+    ctx.fillStyle = dark;
+    ctx.fillRect(cx, top - 7, cw, 6);
+    ctx.fillStyle = main;
+    ctx.fillRect(cx, top - 8, cw, 5);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillRect(cx, top - 8, cw, 1.2);
+  }
+  // 旗子（會飄）
+  const px = t.x + h - 4;
+  const py = top - 8;
+  ctx.strokeStyle = '#3b2a18';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - 16); ctx.stroke();
+  const wave = Math.sin(now / 220 + t.x) * 2;
+  ctx.fillStyle = main;
+  ctx.beginPath();
+  ctx.moveTo(px, py - 16);
+  ctx.quadraticCurveTo(px + 6, py - 16 + wave, px + 12, py - 13);
+  ctx.lineTo(px, py - 9);
+  ctx.closePath();
+  ctx.fill();
+  // 塔上的人物
+  emoji(king ? '🤴' : '👸', t.x, t.y + 1, king ? 23 : 19);
+  // 被打到時閃白光
+  if (now < t.flashUntil) {
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    rr(ctx, t.x - h, top, s, s + 4, 5);
+    ctx.fill();
+  }
+  // 血條（塔上方，中間寫數字）
+  const barW = s + 12;
+  const barY = top - (king ? 28 : 20);
+  if (king) emoji('👑', t.x, barY - 9, 13);
+  drawHpBar(t.x, barY, barW, 9, t.hp / t.maxHp, isMe ? COLOR.meBar : COLOR.enemyBar, Math.ceil(t.hp));
+}
+
+// 畫砲塔：石頭底座＋會轉向目標的砲管
+function drawCannon(u) {
+  const isMe = u.team === 'me';
+  const age = performance.now() - u.born;
+  const drop = age < 220 ? Math.pow(1 - age / 220, 2) * 40 : 0;
+  const y = u.y - drop;
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath(); ctx.ellipse(u.x + 2, u.y + 10, 15, 5, 0, 0, Math.PI * 2); ctx.fill();
+  // 木頭底座
+  ctx.fillStyle = '#6b4a2b';
+  rr(ctx, u.x - 14, y - 6, 28, 18, 4);
+  ctx.fill();
+  ctx.fillStyle = isMe ? COLOR.me : COLOR.enemy;
+  ctx.fillRect(u.x - 14, y + 8, 28, 4);
+  // 砲管（開砲時往後縮）
+  const ang = u.aim !== undefined ? u.aim : (isMe ? -Math.PI / 2 : Math.PI / 2);
+  const recoil = u.recoil && performance.now() - u.recoil < 120 ? 4 : 0;
+  ctx.save();
+  ctx.translate(u.x, y);
+  ctx.rotate(ang);
+  const bg = ctx.createLinearGradient(0, -5, 0, 5);
+  bg.addColorStop(0, '#6a6a6a');
+  bg.addColorStop(0.5, '#2c2c2c');
+  bg.addColorStop(1, '#141414');
+  ctx.fillStyle = bg;
+  rr(ctx, -6 - recoil, -5, 22, 10, 4);
+  ctx.fill();
+  ctx.fillStyle = '#111';
+  ctx.beginPath(); ctx.arc(16 - recoil, 0, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = '#3a3a3a';
+  ctx.beginPath(); ctx.arc(u.x, y, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.beginPath(); ctx.arc(u.x - 2, y - 2, 3, 0, Math.PI * 2); ctx.fill();
+  if (performance.now() < u.flashUntil) {
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath(); ctx.arc(u.x, y, 14, 0, Math.PI * 2); ctx.fill();
+  }
+  // 血條一直顯示（會隨時間減少）
+  drawHpBar(u.x, y - 20, 26, 4, u.hp / u.maxHp, isMe ? COLOR.meBar : COLOR.enemyBar);
+}
+
+function drawUnit(u) {
+  if (u.card.building) { drawCannon(u); return; }
+  const isMe = u.team === 'me';
+  const now = performance.now();
+
+  // 判斷有沒有在走、面向哪邊（用上一格的位置比較）
+  if (u.lx === undefined) { u.lx = u.x; u.ly = u.y; }
+  const dx = u.x - u.lx;
+  const moving = Math.hypot(dx, u.y - u.ly) > 0.02;
+  if (Math.abs(dx) > 0.05) u.face = dx < 0 ? 1 : -1;   // emoji 大多面向左，往右走時翻過來
+  u.lx = u.x; u.ly = u.y;
+
+  // 下場時從空中落下
+  const age = now - u.born;
+  const drop = age < 220 ? Math.pow(1 - age / 220, 2) * 50 : 0;
+  // 走路時上下晃
+  const bob = moving ? Math.abs(Math.sin(now / 110 + u.x)) * 2.5 : 0;
+  const lift = u.card.air ? 14 + Math.sin(now / 160 + u.x) * 2 : 0;
+  const y = u.y - drop - bob - lift;
+
+  // 影子（越高越小越淡）
+  const shadowScale = 1 - Math.min(0.5, (drop + lift) / 60);
+  ctx.fillStyle = `rgba(0,0,0,${0.32 * shadowScale})`;
+  ctx.beginPath(); ctx.ellipse(u.x, u.y + 7, 10 * shadowScale, 3.5 * shadowScale, 0, 0, Math.PI * 2); ctx.fill();
+
+  // 隊伍底座（地上的圓環）
+  if (!u.card.air) {
+    ctx.strokeStyle = isMe ? COLOR.me : COLOR.enemy;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.ellipse(u.x, u.y + 6, 10, 4, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // 炸彈兵倒扣血時外圈閃紅黃光
+  if (u.draining) {
+    ctx.strokeStyle = (Math.floor(now / 110) % 2) ? '#ffea00' : '#ff3000';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(u.x, y - 2, 14, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // 本體：emoji（加一點陰影，翻轉面向）
+  ctx.save();
+  ctx.translate(u.x, y - 3);
+  ctx.scale(u.face || 1, 1);
+  ctx.shadowColor = isMe ? 'rgba(40,110,255,0.9)' : 'rgba(255,50,50,0.9)';
+  ctx.shadowBlur = 4;
+  emoji(u.card.emoji, 0, 0, u.card.count === 3 ? 16 : 20);
+  ctx.restore();
+
+  // 被打到時閃白光
+  if (now < u.flashUntil) {
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath(); ctx.arc(u.x, y - 3, 10, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 血條（受傷了才顯示）
+  if (u.hp < u.maxHp) drawHpBar(u.x, y - 19, 22, 3.5, u.hp / u.maxHp, isMe ? COLOR.meBar : COLOR.enemyBar);
+}
+
+function drawEffects() {
+  for (const e of G.effects) {
+    const a = e.t / e.max;   // 1 → 0
+    const p = 1 - a;         // 0 → 1（飛行進度）
+    if (e.kind === 'arrow') {
+      // 塔的箭：有箭頭的線，沿弧線飛向目標
+      const x = e.x1 + (e.x2 - e.x1) * p;
+      const y = e.y1 + (e.y2 - e.y1) * p - Math.sin(p * Math.PI) * 14;
+      const ang = Math.atan2(e.y2 - e.y1 - Math.cos(p * Math.PI) * 14 * Math.PI, e.x2 - e.x1);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(ang);
+      ctx.strokeStyle = '#5a3a1a';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(3, 0); ctx.stroke();
+      ctx.fillStyle = '#ddd';
+      ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(1, -2.5); ctx.lineTo(1, 2.5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(-10, -1.8, 3, 1.2);
+      ctx.fillRect(-10, 0.6, 3, 1.2);
+      ctx.restore();
+    } else if (e.kind === 'ball') {
+      // 砲彈
+      const x = e.x1 + (e.x2 - e.x1) * p;
+      const y = e.y1 + (e.y2 - e.y1) * p;
+      ctx.fillStyle = '#1a1a1a';
+      ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+    } else if (e.kind === 'orb') {
+      // 法師的火球（發光）
+      const x = e.x1 + (e.x2 - e.x1) * p;
+      const y = e.y1 + (e.y2 - e.y1) * p;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, 10);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.3, 'rgba(255,190,90,0.95)');
+      g.addColorStop(1, 'rgba(255,90,30,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+    } else if (e.kind === 'heal') {
+      // 治療綠線（跟著兩個單位的位置畫）
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = '#3dff7a';
+      ctx.shadowColor = '#3dff7a';
+      ctx.shadowBlur = 6;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(e.src.x, e.src.y - 4);
+      ctx.lineTo(e.dst.x, e.dst.y - 4);
+      ctx.stroke();
+      ctx.restore();
+    } else if (e.kind === 'splash') {
+      // 法師的範圍傷害圈
+      ctx.fillStyle = `rgba(255,140,40,${a * 0.3})`;
+      ctx.strokeStyle = `rgba(255,200,120,${a})`;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(e.x, e.y, 30 * (0.6 + p * 0.4), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    } else if (e.kind === 'boom') {
+      // 爆炸：外圈火光＋內圈白光
+      const r = BOMB.radius * (0.5 + p * 0.8);
+      const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, r);
+      g.addColorStop(0, `rgba(255,255,220,${a})`);
+      g.addColorStop(0.4, `rgba(255,170,50,${a * 0.9})`);
+      g.addColorStop(1, 'rgba(200,60,20,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.fill();
+    } else if (e.kind === 'spawn') {
+      // 下牌時的擴散圈
+      ctx.strokeStyle = e.color;
+      ctx.globalAlpha = a;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.ellipse(e.x, e.y + 6, 8 + p * 26, (8 + p * 26) * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else if (e.kind === 'num') {
+      // 飄起來的數字
+      ctx.globalAlpha = Math.min(1, a * 2);
+      outlinedText(e.text, e.x, e.y - p * 22, 12 + (1 - Math.min(1, p * 4)) * 4, e.color);
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+function drawParticles() {
+  for (const p of G.particles) {
+    ctx.globalAlpha = Math.max(0, p.life / p.max);
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (0.5 + 0.5 * p.life / p.max), 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// 畫面中央的大字（開場倒數、開戰、最後一分鐘）
+function drawBanner() {
+  let text = null;
+  let scale = 1;
+  let alpha = 1;
+  if (G.started && G.countdown > 0) {
+    text = String(Math.ceil(G.countdown));
+    const f = G.countdown % 1;
+    scale = 1 + f * 0.5;
+    alpha = Math.min(1, f * 3 + 0.2);
+  } else {
+    const b = G.effects.find(e => e.kind === 'banner');
+    if (b) { text = b.text; scale = 1 + Math.max(0, b.t / b.max - 0.7) * 1.2; alpha = Math.min(1, b.t / b.max * 3); }
+  }
+  if (!text) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const g = ctx.createLinearGradient(0, RIVER_Y - 36, 0, RIVER_Y + 36);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(0.5, 'rgba(0,0,0,0.45)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, RIVER_Y - 36, W, 72);
+  const size = Math.round((text.length > 2 ? 34 : 50) * scale);
+  outlinedText(text, W / 2, RIVER_Y + 2, size, '#ffd45a', '#5a3300');
+  ctx.restore();
+}
+
+function draw() {
+  ctx.save();
+  // 畫面震動
+  if (G.shake > 0) ctx.translate(randRange(-G.shake, G.shake), randRange(-G.shake, G.shake));
+  ctx.drawImage(bgCanvas, 0, 0, W, H);
+  drawWater();
+  drawDeployZone();
+  // 塔和地面單位依 y 由上往下畫（下面的會蓋住上面的，有遠近感）
+  const things = [];
+  for (const t of G.towers) things.push({ y: t.y, draw: () => drawTower(t) });
+  for (const u of G.units) if (!u.card.air) things.push({ y: u.y, draw: () => drawUnit(u) });
+  things.sort((a, b) => a.y - b.y);
+  for (const th of things) th.draw();
+  // 空中單位最後畫（在最上層）
+  for (const u of G.units) if (u.card.air) drawUnit(u);
+  drawParticles();
+  drawEffects();
+  drawDeployPreview();
+  ctx.restore();
+  ctx.drawImage(vignetteCanvas, 0, 0, W, H);
+  drawBanner();
+}
+
+// =====================================================
+// 畫面縮放：競技場依視窗大小等比縮放
+// =====================================================
+function resize() {
+  const app = document.getElementById('app');
+  const wrap = document.getElementById('arenaWrap');
+  let maxW, maxH;
+  if (window.matchMedia('(min-width: 860px)').matches) {
+    // 寬螢幕：競技場在左邊，用滿整個高度
+    maxH = window.innerHeight - 34;
+    maxW = window.innerWidth - 380 - 70;
+  } else {
+    // 直式：除了競技場以外，其他介面佔掉的高度
+    const others = app.offsetHeight - wrap.offsetHeight + 10;
+    maxW = app.clientWidth - 30;
+    maxH = window.innerHeight - others;
+  }
+  const cssH = Math.max(260, Math.min(maxH, maxW * H / W));
+  const cssW = cssH * W / H;
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  // 依螢幕像素密度設定實際解析度，畫面才不會模糊
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+  stripePattern = null;
+}
+window.addEventListener('resize', resize);
+document.getElementById('testPanel').addEventListener('toggle', resize);
+
+// 開始畫面的牌組預覽
+function renderDeckPreview() {
+  const box = document.getElementById('deckPreview');
+  box.innerHTML = DECK.map(id => {
+    const c = CARDS[id];
+    return `<div class="mini role-${c.role}"><span class="gem"><b>${c.cost}</b></span>` +
+           `<span class="e">${c.emoji}</span><span class="n stroke">${c.name}</span></div>`;
+  }).join('');
+}
+
+// =====================================================
+// 主迴圈
+// =====================================================
+let lastTime = performance.now();
+function loop(now) {
+  // dt：距離上一格經過幾秒（最多算 0.05 秒，避免切分頁回來時暴衝）
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+  update(dt);
+  updateParticles(dt);
+  updateUI();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+buildBackground();
+renderDeckPreview();
+newGame();
+resize();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
