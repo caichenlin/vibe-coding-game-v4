@@ -925,8 +925,34 @@
   /* =====================================================
      矮螢幕（小手機）：介面縮小，讓競技場大一點
      ===================================================== */
-  @media (max-height: 720px) and (max-width: 859px) {
-    #app { gap: 5px; padding-top: 5px; }
+  /* 4.3：手機（寬度 860 以下）一律用精簡版面，讓競技場大一點 */
+  @media (max-width: 859px) {
+    #app { gap: 5px; padding: 5px 8px 6px; }
+    #arenaWrap { padding: 3px; border-radius: 13px; }
+    /* 名牌和時間疊在競技場上方的遠景（那裡本來只有山和樹） */
+    #arenaWrap > #hud {
+      position: absolute;
+      left: 7px; right: 7px; top: 6px;
+      z-index: 3;
+      pointer-events: none;
+      gap: 5px;
+    }
+    #arenaWrap > #hud .plate, #arenaWrap > #hud #timeBox {
+      background: rgba(9, 13, 26, 0.78);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+    }
+    #arenaWrap > #hud { width: auto; gap: 4px; left: 6px; right: 6px; top: 5px; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+    #arenaWrap > #hud .plate { padding: 2px 5px; gap: 4px; min-width: 0; border-radius: 9px; }
+    #arenaWrap > #hud .avatar { width: 22px; height: 22px; font-size: 13px; border-radius: 7px; }
+    #arenaWrap > #hud #timeBox { min-width: 50px; padding: 1px 6px; border-radius: 9px; }
+    #arenaWrap > #hud #timeLabel { font-size: 9px; letter-spacing: 0; white-space: nowrap; }
+    #arenaWrap > #hud #timer { font-size: 16px; }
+    #arenaWrap > #hud .pname { font-size: 11.5px; letter-spacing: 0; }
+    #arenaWrap > #hud .crowns { font-size: 11px; }
+    #footer .small-btn { padding: 4px 9px; font-size: 12px; }
+    #testPanel { padding: 3px 8px; font-size: 12px; }
     .plate { padding: 3px 6px; }
     .avatar { width: 24px; height: 24px; font-size: 14px; }
     #timer { font-size: 18px; }
@@ -4071,6 +4097,9 @@ function cardArt(c) {
   return CARD_ART_CACHE[id];
 }
 
+// 4.3：場上角色畫大一點（只影響畫面，碰撞和射程不變）
+const UNIT_DRAW_SCALE = 1.2;
+
 const SPRITES = { minions: spMinion, bomb: spBomb, bats: spBat, mage: spMage, hog: spHog, healer: spHealer, tank: spTank };
 // 每個角色的高度（血條放在頭上）
 const SPRITE_H = { minions: 22, bomb: 23, bats: 13, mage: 32, hog: 18, healer: 29, tank: 32 };
@@ -4140,7 +4169,7 @@ function drawUnit(u) {
 
   // 本體：自己畫的角色（受擊時壓扁，並疊一層白色）
   const a = animOf(u, moving, now);
-  const k = u.card.count === 3 ? 0.9 : 1;
+  const k = (u.card.count === 3 ? 0.9 : 1) * UNIT_DRAW_SCALE;
   ctx.save();
   ctx.translate(u.x, y + 6);
   ctx.scale(dir * (1 + squash) * k, (1 - squash) * k);
@@ -4413,6 +4442,11 @@ function draw() {
 function resize() {
   const app = document.getElementById('app');
   const wrap = document.getElementById('arenaWrap');
+  // 4.3：手機版把名牌和時間疊進競技場上方；電腦版放回右側欄的最上面
+  const hud = document.getElementById('hud');
+  const mobile = !window.matchMedia('(min-width: 860px)').matches;
+  if (mobile && hud.parentElement !== wrap) wrap.appendChild(hud);
+  if (!mobile && hud.parentElement !== app) app.insertBefore(hud, app.firstChild);
   let maxW, maxH;
   if (window.matchMedia('(min-width: 860px)').matches) {
     // 寬螢幕：競技場在左邊，用滿整個高度
