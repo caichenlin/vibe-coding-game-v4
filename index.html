@@ -6,20 +6,27 @@
 <title>聖水小戰場</title>
 <style>
   /* =====================================================
-     整體配色（深色介面＋金色重點）
+     整體配色（第 4 版：深藍夜色石板＋金色重點，所有面板共用同一套樣式）
      ===================================================== */
   :root {
-    --bg: #0f1420;
-    --panel: #1a2234;
-    --panel-2: #222c42;
-    --line: rgba(255, 255, 255, 0.08);
-    --text: #eef2fa;
-    --muted: #93a0bb;
-    --gold: #ffc94a;
-    --gold-dark: #b8860b;
-    --blue: #4c8df6;
-    --red: #ef5350;
-    --elixir: #d65cf0;
+    --bg: #0b1020;
+    --panel: #151d34;
+    --panel-hi: #1e2946;
+    --panel-lo: #0f1528;
+    --edge: rgba(255, 214, 130, 0.17);     /* 面板外框：淡金色 */
+    --line: rgba(255, 255, 255, 0.09);
+    --text: #f4f6fc;
+    --muted: #b1bbd2;                       /* 次要文字（比 3.1 亮，對比度足夠） */
+    --gold: #ffcf4d;
+    --gold-hi: #fff2bf;
+    --gold-dark: #9a6400;
+    --blue: #4f94ff;
+    --red: #ff5a5f;
+    --elixir: #e05cf5;
+    --elixir-deep: #6a1891;
+    --r-lg: 16px;
+    --r-md: 12px;
+    --shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
   }
   * { box-sizing: border-box; }
   html, body {
@@ -31,11 +38,13 @@
     -webkit-user-select: none;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
-    /* 背景：深色＋淡淡的斜紋＋中間微亮 */
+    /* 背景：深藍夜色，左上微藍光、右下微紫光 */
     background:
-      radial-gradient(ellipse at 50% 30%, rgba(76, 141, 246, 0.16), transparent 60%),
-      repeating-linear-gradient(45deg, rgba(255,255,255,0.018) 0 2px, transparent 2px 14px),
+      radial-gradient(ellipse at 15% 0%, rgba(79, 148, 255, 0.18), transparent 55%),
+      radial-gradient(ellipse at 90% 100%, rgba(224, 92, 245, 0.12), transparent 55%),
+      repeating-linear-gradient(45deg, rgba(255,255,255,0.016) 0 2px, transparent 2px 14px),
       var(--bg);
+    background-color: var(--bg);
     background-attachment: fixed;
   }
   button { font-family: inherit; }
@@ -48,11 +57,17 @@
     align-items: center;
     gap: 7px;
   }
-  /* 遊戲風格的粗體描邊字 */
+  /* 粗體描邊字 */
   .stroke {
     font-weight: 900;
     color: #fff;
     text-shadow: 0 1px 0 rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.8);
+  }
+  /* 共用面板樣式：名牌、時間、聖水、手牌、教練、小抄、工具列、開始與結算畫面都用這一套 */
+  .plate, #timeBox, #elixirRow, #handRow, #coach, #guide, .small-btn, #testPanel {
+    background: linear-gradient(180deg, var(--panel-hi), var(--panel));
+    border: 1px solid var(--edge);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 14px rgba(0,0,0,0.3);
   }
 
   /* =====================================================
@@ -70,9 +85,7 @@
     align-items: center;
     gap: 7px;
     padding: 5px 8px;
-    background: linear-gradient(180deg, var(--panel-2), var(--panel));
-    border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--r-md);
     position: relative;
     overflow: hidden;
   }
@@ -82,36 +95,39 @@
     left: 0; right: 0; top: 0;
     height: 3px;
   }
-  .plate.me::before { background: var(--blue); }
-  .plate.enemy::before { background: var(--red); }
+  .plate.me::before { background: linear-gradient(90deg, var(--blue), transparent); }
+  .plate.enemy::before { background: linear-gradient(270deg, var(--red), transparent); }
   .plate.enemy { justify-content: flex-end; text-align: right; }
   .avatar {
     width: 30px; height: 30px;
     flex: none;
-    border-radius: 8px;
+    border-radius: 9px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 18px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 2px 4px rgba(0,0,0,0.4);
   }
-  .plate.me .avatar { background: linear-gradient(#5d9bff, #2d62c9); }
-  .plate.enemy .avatar { background: linear-gradient(#ff6f6f, #c33232); }
-  .pname { font-size: 12px; font-weight: 900; letter-spacing: 1px; }
+  .plate.me .avatar { background: linear-gradient(#6aa8ff, #2a5fc8); }
+  .plate.enemy .avatar { background: linear-gradient(#ff7b7f, #c2303a); }
+  .pname { font-size: 13px; font-weight: 900; letter-spacing: 1px; }
   .crowns { display: flex; gap: 1px; font-size: 13px; line-height: 1.2; }
   .plate.enemy .crowns { justify-content: flex-end; }
-  .crowns span { filter: grayscale(1) brightness(0.35); }
+  .crowns span { display: inline-block; filter: grayscale(1) brightness(0.4); }
   .crowns span.on { filter: drop-shadow(0 0 4px var(--gold)); }
+  /* 拿到新皇冠時彈一下 */
+  .crowns span.pop { animation: crownPop 0.7s cubic-bezier(.2,1.6,.5,1); }
+  @keyframes crownPop { 0% { transform: scale(0.2) rotate(-30deg); } 60% { transform: scale(1.7) rotate(8deg); } 100% { transform: scale(1); } }
   #timeBox {
-    min-width: 76px;
+    min-width: 78px;
     text-align: center;
     padding: 3px 10px;
-    background: linear-gradient(180deg, #0b0f18, #151c2b);
-    border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--r-md);
+    background: linear-gradient(180deg, #0a0f1d, #141c31);
   }
-  #timeLabel { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+  #timeLabel { font-size: 11px; color: var(--muted); letter-spacing: 1px; }
   #timer { font-size: 22px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.15; }
-  #timer.hurry { color: #ff6b6b; animation: pulse 1s ease-in-out infinite; }
+  #timer.hurry { color: #ff7478; animation: pulse 1s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: 0.6; } }
 
   /* =====================================================
@@ -120,16 +136,17 @@
   #arenaWrap {
     position: relative;
     padding: 5px;
-    border-radius: 14px;
-    background: linear-gradient(180deg, #4b3a26, #2e2214);
+    border-radius: var(--r-lg);
+    background: linear-gradient(180deg, #5a4630, #2e2214);
     box-shadow:
       0 0 0 1px rgba(0,0,0,0.6),
-      0 10px 30px rgba(0,0,0,0.55),
-      inset 0 1px 0 rgba(255,255,255,0.15);
+      0 0 0 3px rgba(255, 214, 130, 0.12),
+      0 12px 32px rgba(0,0,0,0.55),
+      inset 0 1px 0 rgba(255,255,255,0.18);
   }
   #arena {
     display: block;
-    border-radius: 9px;
+    border-radius: 11px;
     touch-action: none;
     cursor: crosshair;
   }
@@ -138,26 +155,32 @@
     left: 50%;
     bottom: 13%;
     transform: translateX(-50%);
-    padding: 7px 16px;
+    padding: 8px 18px;
     border-radius: 999px;
-    background: rgba(10, 14, 22, 0.85);
-    border: 1px solid rgba(255,255,255,0.15);
-    font-size: 14px;
-    font-weight: 700;
+    background: rgba(10, 14, 26, 0.9);
+    border: 1px solid rgba(255,255,255,0.18);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.45);
+    font-size: 15px;
+    font-weight: 900;
     white-space: nowrap;
     pointer-events: none;
     transition: opacity 0.25s, transform 0.25s;
   }
+  #msg.warn { border-color: rgba(255, 110, 110, 0.75); color: #ffd6d6; }
+  #msg.good { border-color: rgba(255, 207, 77, 0.8); color: var(--gold-hi); }
   #msg.hide { opacity: 0; transform: translateX(-50%) translateY(6px); }
 
   /* =====================================================
-     聖水條（10 格，每格單獨填滿）
+     聖水條（一整條會流動的聖水，10 格刻度；正在充能的部分會閃）
      ===================================================== */
   #elixirRow {
+    position: relative;
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
+    padding: 8px 10px 8px 9px;
+    border-radius: var(--r-md);
   }
   .gem {
     display: inline-flex;
@@ -165,145 +188,313 @@
     justify-content: center;
     border-radius: 50% 0 50% 50%;
     transform: rotate(-45deg);
-    background: radial-gradient(circle at 35% 30%, #ffd3ff 0%, #e070f5 35%, #9b2bc0 75%, #5c137a 100%);
+    background: radial-gradient(circle at 35% 30%, #ffd9ff 0%, #e46ef7 35%, #9b2bc0 75%, #5c137a 100%);
     box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 0 0 1.5px rgba(255,255,255,0.75);
   }
   .gem > b {
     transform: rotate(45deg);
     font-weight: 900;
     color: #fff;
-    text-shadow: 0 1px 0 #3b0a50, 0 0 2px #3b0a50;
+    text-shadow: 0 1px 0 #3b0a50, 0 0 3px #3b0a50;
   }
-  #elixirGem { width: 34px; height: 34px; flex: none; }
+  #elixirGem { width: 34px; height: 34px; flex: none; transition: transform 0.15s; }
   #elixirGem > b { font-size: 17px; }
-  #elixirBar {
-    flex: 1;
-    display: grid;
-    grid-template-columns: repeat(10, 1fr);
-    gap: 3px;
-    padding: 3px;
-    background: #0b0f18;
-    border: 1px solid var(--line);
-    border-radius: 8px;
+  /* 聖水數字每加 1 就跳一下 */
+  #elixirGem.tick > b { animation: numTick 0.3s ease-out; }
+  @keyframes numTick { from { transform: rotate(45deg) scale(1.45); } to { transform: rotate(45deg) scale(1); } }
+  #elixirGem.full { animation: gemPulse 0.9s ease-in-out infinite alternate; }
+  @keyframes gemPulse {
+    from { box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 0 0 1.5px rgba(255,255,255,0.75), 0 0 0 rgba(224,92,245,0); }
+    to   { box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 0 0 1.5px rgba(255,255,255,0.9), 0 0 16px rgba(255,140,255,0.95); }
   }
-  .cell {
+  #elixirBar {
     position: relative;
-    height: 16px;
-    border-radius: 4px;
-    background: #24183a;
+    flex: 1;
+    height: 22px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #0a0d18, #1d1530);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08);
     overflow: hidden;
   }
-  .cell > i {
+  /* 已經滿的聖水 */
+  #elixirFill, #elixirCharge {
     position: absolute;
     left: 0; top: 0; bottom: 0;
     width: 0;
-    background: linear-gradient(180deg, #f6a8ff, #d65cf0 50%, #a22fc4);
+    border-radius: 999px;
   }
-  .cell.part > i { opacity: 0.55; }
-  .cell::after {
+  #elixirFill {
+    background:
+      repeating-linear-gradient(115deg, rgba(255,255,255,0.2) 0 7px, rgba(255,255,255,0) 7px 18px),
+      linear-gradient(180deg, #ffc8ff, #e05cf5 45%, #9a2bc8 80%, #6a1891);
+    background-size: 38px 100%, 100% 100%;
+    animation: elixirFlow 1.4s linear infinite;
+    box-shadow: inset 0 -3px 5px rgba(60, 0, 90, 0.45);
+  }
+  /* 充能中（還沒滿 1 點的那段）：半透明、會呼吸 */
+  #elixirCharge {
+    background: linear-gradient(180deg, #f6c4ff, #c757e6);
+    opacity: 0.4;
+    animation: chargeBreath 0.8s ease-in-out infinite alternate;
+  }
+  @keyframes elixirFlow { to { background-position: 38px 0, 0 0; } }
+  @keyframes chargeBreath { to { opacity: 0.65; } }
+  /* 液面前緣的亮光 */
+  #elixirFill::after {
     content: "";
     position: absolute;
-    left: 0; right: 0; top: 0;
-    height: 40%;
-    background: rgba(255,255,255,0.16);
+    right: 0; top: 2px; bottom: 2px;
+    width: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.85);
+    filter: blur(2px);
   }
-  #elixirBar.full .cell > i { animation: elixirGlow 0.9s ease-in-out infinite alternate; }
-  @keyframes elixirGlow { to { filter: brightness(1.5); } }
+  /* 10 格刻度 */
+  #elixirBar .ticks {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1.5px), rgba(10, 6, 20, 0.6) calc(10% - 1.5px) 10%);
+    pointer-events: none;
+  }
+  /* 上方的玻璃反光 */
+  #elixirBar::after {
+    content: "";
+    position: absolute;
+    left: 4px; right: 4px; top: 2px;
+    height: 35%;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.18);
+    pointer-events: none;
+  }
+  #elixirBar.full { box-shadow: inset 0 2px 4px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,180,255,0.6), 0 0 14px rgba(224,92,245,0.8); }
+  #elixirBar.full #elixirFill { filter: brightness(1.15); }
+  /* 「聖水已滿」標籤 */
+  #elixirFull {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(0.6);
+    padding: 1px 10px;
+    border-radius: 999px;
+    background: rgba(40, 6, 60, 0.85);
+    border: 1px solid rgba(255, 200, 255, 0.8);
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.25s cubic-bezier(.2,1.6,.5,1);
+    pointer-events: none;
+    z-index: 2;
+  }
+  #elixirBar.full #elixirFull { opacity: 1; transform: translate(-50%, -50%) scale(1); animation: fullBlink 0.9s ease-in-out infinite alternate; }
+  @keyframes fullBlink { to { background: rgba(120, 20, 150, 0.9); } }
+  /* 聖水不夠時：標出這張牌需要的量（紅色虛線框） */
+  #elixirNeed {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 0;
+    border: 2px dashed #ff6b6b;
+    border-radius: 999px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+  #elixirNeed.show { animation: needFlash 1.3s ease-out; }
+  @keyframes needFlash { 0%, 30%, 60% { opacity: 1; background: rgba(255,80,80,0.22); } 15%, 45% { opacity: 0.35; } 100% { opacity: 0; } }
+  #elixirBar.short { animation: barShake 0.35s; }
+  @keyframes barShake { 25% { transform: translateX(-4px); } 50% { transform: translateX(4px); } 75% { transform: translateX(-2px); } }
+  /* 出牌時從聖水滴飄出「-4」 */
+  .elixir-pop {
+    position: absolute;
+    left: 14px; top: -4px;
+    font-size: 16px;
+    font-weight: 900;
+    color: #ffb8ff;
+    text-shadow: 0 1px 0 #3b0a50, 0 0 4px #3b0a50;
+    pointer-events: none;
+    animation: popUp 0.9s ease-out forwards;
+    z-index: 3;
+  }
+  @keyframes popUp { from { transform: translateY(0) scale(1.3); opacity: 1; } to { transform: translateY(-26px) scale(1); opacity: 0; } }
 
   /* =====================================================
-     手牌（卡框顏色依類型）
+     手牌：卡框顏色＝類型；左上費用、右上類型標籤、下方名字
      ===================================================== */
   #handRow {
+    position: relative;
     width: 100%;
     display: flex;
     align-items: stretch;
-    gap: 7px;
-    padding: 9px 8px 8px;
-    background: linear-gradient(180deg, var(--panel-2), var(--panel));
-    border: 1px solid var(--line);
-    border-radius: 14px;
+    gap: 8px;
+    padding: 10px 8px 8px;
+    border-radius: var(--r-lg);
   }
   #hand {
     flex: 1;
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 7px;
+    gap: 8px;
   }
-  .card {
-    --role: #4c8df6;
+  .card, #nextCard, #deckPreview .mini {
+    --role: #4f94ff;
     position: relative;
-    height: 88px;
     padding: 0;
     border: none;
-    border-radius: 10px;
+    border-radius: 12px;
     background: var(--role);   /* 舊瀏覽器的備用顏色 */
-    background: linear-gradient(180deg, color-mix(in srgb, var(--role) 85%, white), var(--role) 40%, color-mix(in srgb, var(--role) 55%, black));
-    box-shadow: 0 3px 0 rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.25);
+    background: linear-gradient(160deg, color-mix(in srgb, var(--role) 70%, white), var(--role) 40%, color-mix(in srgb, var(--role) 50%, black));
+    box-shadow: 0 3px 0 rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.3);
+  }
+  .card {
+    height: 92px;
     cursor: pointer;
     touch-action: manipulation;
     transition: transform 0.14s cubic-bezier(.3,1.6,.6,1), box-shadow 0.14s;
     overflow: visible;
   }
-  .card .art {
+  /* 卡面（深色底＋類型色光暈） */
+  .card .art, #nextCard .art, #deckPreview .mini .art {
     position: absolute;
-    left: 4px; right: 4px; top: 4px; bottom: 22px;
-    border-radius: 7px;
-    background: radial-gradient(circle at 50% 35%, rgba(255,255,255,0.55), rgba(0,0,0,0.15));
-    background:
-      radial-gradient(circle at 50% 35%, rgba(255,255,255,0.55), transparent 60%),
-      linear-gradient(180deg, color-mix(in srgb, var(--role) 35%, white), color-mix(in srgb, var(--role) 70%, black));
+    left: 3px; right: 3px; top: 3px; bottom: 21px;
+    border-radius: 9px;
+    background: #121a30;
+    background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--role) 55%, #1b2444) 0%, #0f1528 78%);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 30px;
-    box-shadow: inset 0 -6px 10px rgba(0,0,0,0.25);
+    font-size: 31px;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35), inset 0 -8px 12px rgba(0,0,0,0.3);
     overflow: hidden;
+    transition: filter 0.2s;
   }
-  .card .name {
+  .card .art > i, #nextCard .art > i, #deckPreview .mini .art > i {
+    font-style: normal;
+    filter: drop-shadow(0 3px 2px rgba(0,0,0,0.55));
+  }
+  /* 名字列 */
+  .card .name, #nextCard .name, #deckPreview .mini .name {
     position: absolute;
-    left: 0; right: 0; bottom: 5px;
-    font-size: 11px;
+    left: 3px; right: 3px; bottom: 3px;
+    height: 17px;
+    border-radius: 0 0 9px 9px;
+    background: rgba(6, 10, 22, 0.55);
+    font-size: 12px;
+    line-height: 17px;
     white-space: nowrap;
     text-align: center;
+    transition: background 0.15s, color 0.15s;
   }
-  .card .name.long, #nextCard .name.long { font-size: 9.5px; }
+  .card .name.long { font-size: 10.5px; }
+  /* 類型標籤（右上角） */
+  .card .tag, #nextCard .tag, #deckPreview .mini .tag {
+    position: absolute;
+    right: 5px; top: 5px;
+    padding: 0 5px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 15px;
+    color: #fff;
+    background: rgba(5, 8, 18, 0.72);
+    box-shadow: inset 0 0 0 1px var(--role);
+    z-index: 1;
+  }
+  /* 費用（左上角聖水滴） */
   .card .gem {
     position: absolute;
-    left: -6px;
-    top: -6px;
-    width: 22px;
-    height: 22px;
-    z-index: 2;
+    left: -7px;
+    top: -7px;
+    width: 24px;
+    height: 24px;
+    z-index: 3;
   }
-  .card .gem > b { font-size: 12px; }
+  .card .gem > b { font-size: 13px; }
   /* 聖水不夠：從上往下蓋一層暗色，聖水越接近，暗色越少（像在充能） */
   .card .shade {
     position: absolute;
     left: 0; right: 0; top: 0;
     height: 0;
-    border-radius: 10px 10px 0 0;
-    background: rgba(8, 10, 18, 0.62);
+    border-radius: 12px 12px 0 0;
+    background: rgba(6, 8, 16, 0.6);
     pointer-events: none;
     transition: height 0.15s linear;
+    z-index: 2;
   }
-  .card.poor { filter: saturate(0.35); }
+  /* 「還差 N」：聖水不夠時直接寫在卡上 */
+  .card .need {
+    position: absolute;
+    left: 50%; top: 38%;
+    transform: translate(-50%, -50%);
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(20, 6, 30, 0.85);
+    border: 1px solid rgba(255, 150, 255, 0.55);
+    color: #ffc9ff;
+    font-size: 11px;
+    font-weight: 900;
+    white-space: nowrap;
+    z-index: 2;
+    display: none;
+  }
+  .card.poor .need { display: block; }
+  .card.poor .art { filter: grayscale(0.75) brightness(0.75); }
+  .card.poor .gem { filter: grayscale(0.85) brightness(0.8); }
+  /* 選取中：往上浮、金色外框發光、名字列變金色 */
   .card.selected {
-    transform: translateY(-10px) scale(1.05);
-    box-shadow: 0 0 0 2px var(--gold), 0 0 18px rgba(255,201,74,0.7), 0 6px 0 rgba(0,0,0,0.45);
+    transform: translateY(-11px) scale(1.05);
+    box-shadow: 0 0 0 3px var(--gold), 0 0 22px rgba(255, 207, 77, 0.8), 0 8px 0 rgba(0,0,0,0.45);
+    z-index: 4;
   }
+  .card.selected .name { background: var(--gold); color: #3a2600; text-shadow: none; }
+  .card.selected::before {
+    content: "▼";
+    position: absolute;
+    left: 50%; top: -19px;
+    transform: translateX(-50%);
+    color: var(--gold);
+    font-size: 12px;
+    text-shadow: 0 0 6px rgba(255,207,77,0.9);
+    animation: bob 0.6s ease-in-out infinite alternate;
+  }
+  @keyframes bob { to { transform: translate(-50%, 3px); } }
   @media (hover: hover) {
     .card:not(.poor):not(.selected):hover { transform: translateY(-4px); }
   }
+  /* 聖水不夠還點：卡片左右搖 */
+  .card.shake { animation: cardShake 0.4s; }
+  @keyframes cardShake { 20% { transform: translateX(-5px) rotate(-3deg); } 40% { transform: translateX(5px) rotate(3deg); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+  /* 剛好聖水夠了：卡面閃過一道光 */
+  .card.ready .art::after {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0;
+    left: -60%;
+    width: 50%;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,0.7), transparent);
+    animation: shine 0.6s ease-out;
+  }
+  @keyframes shine { to { left: 120%; } }
+  /* 新補進手牌的卡：從右邊滑進來 */
+  .card.enter { animation: cardIn 0.35s cubic-bezier(.2,1.4,.5,1); }
+  @keyframes cardIn { from { transform: translate(30px, 10px) scale(0.6); opacity: 0; } }
+  /* 出牌時飛出去的卡（複製一張做動畫） */
+  .card-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 20;
+    animation: ghostFly 0.4s ease-in forwards;
+  }
+  @keyframes ghostFly { to { transform: translateY(-70px) scale(0.5); opacity: 0; } }
   /* 依類型的卡框顏色 */
-  .role-core     { --role: #e0a92a; }   /* 進攻核心：金色 */
-  .role-troop    { --role: #4c8df6; }   /* 一般部隊：藍色 */
-  .role-air      { --role: #22b3ad; }   /* 空中：青色 */
-  .role-magic    { --role: #9a62ff; }   /* 法師：紫色 */
-  .role-support  { --role: #3fb75e; }   /* 輔助：綠色 */
-  .role-building { --role: #8592a6; }   /* 建築：鐵灰 */
+  .role-core     { --role: #e8ad2c; }   /* 進攻核心：金色 */
+  .role-troop    { --role: #4f94ff; }   /* 地面部隊：藍色 */
+  .role-air      { --role: #25bdb6; }   /* 空中：青色 */
+  .role-magic    { --role: #a06bff; }   /* 範圍傷害：紫色 */
+  .role-support  { --role: #41c065; }   /* 輔助：綠色 */
+  .role-building { --role: #8c99ae; }   /* 建築：鐵灰 */
 
   #nextBox {
-    width: 54px;
+    width: 56px;
     flex: none;
     display: flex;
     flex-direction: column;
@@ -311,102 +502,81 @@
     justify-content: flex-end;
     gap: 3px;
   }
-  .next-label { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+  .next-label { font-size: 11px; color: var(--muted); letter-spacing: 1px; font-weight: 700; }
   #nextCard {
-    position: relative;
-    width: 54px;
-    height: 64px;
-    border-radius: 8px;
-    background: var(--role, #4c8df6);
-    background: linear-gradient(180deg, color-mix(in srgb, var(--role) 80%, white), color-mix(in srgb, var(--role) 55%, black));
-    opacity: 0.8;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25);
+    width: 56px;
+    height: 66px;
+    opacity: 0.85;
   }
-  #nextCard .art {
-    position: absolute;
-    left: 3px; right: 3px; top: 3px; bottom: 17px;
-    border-radius: 5px;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--role) 35%, white), color-mix(in srgb, var(--role) 70%, black));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 21px;
-  }
-  #nextCard .name { position: absolute; left: 0; right: 0; bottom: 3px; font-size: 9px; white-space: nowrap; text-align: center; }
+  #nextCard .art { font-size: 22px; bottom: 17px; border-radius: 7px; }
+  #nextCard .name { font-size: 10px; height: 14px; line-height: 14px; border-radius: 0 0 7px 7px; }
+  #nextCard .name.long { font-size: 8.5px; }
+  #nextCard .tag { display: none; }
 
   /* =====================================================
      教練（頭像＋對話框）
      ===================================================== */
   #coach {
     width: 100%;
-    height: 56px;
+    height: 60px;
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 10px;
+    padding: 6px 10px 6px 8px;
+    border-radius: var(--r-md);
+    border-left: 3px solid var(--gold);
   }
   .coach-avatar {
-    width: 44px; height: 44px;
+    width: 42px; height: 42px;
     flex: none;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 25px;
+    font-size: 24px;
     background: radial-gradient(circle at 40% 35%, #fff3cf, #f2c14e 70%, #b8860b);
-    box-shadow: 0 0 0 2px #1a2234, 0 0 0 3px var(--gold), 0 3px 8px rgba(0,0,0,0.5);
+    box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--gold), 0 3px 8px rgba(0,0,0,0.5);
   }
   .bubble {
-    position: relative;
     flex: 1;
+    min-width: 0;
     height: 100%;
-    padding: 5px 10px;
-    background: #f7f1e1;
-    color: #3a2c10;
-    border-radius: 10px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     justify-content: center;
   }
-  .bubble::before {
-    content: "";
-    position: absolute;
-    left: -6px; top: 50%;
-    margin-top: -6px;
-    border: 6px solid transparent;
-    border-right-color: #f7f1e1;
-    border-left: 0;
-  }
-  .coach-name { font-size: 10px; font-weight: 900; color: #b07a00; letter-spacing: 1px; }
-  #coachText { font-size: 12.5px; font-weight: 700; line-height: 1.35; }
-  #coach.flash .bubble { animation: bubblePop 0.35s ease-out; }
-  @keyframes bubblePop { 0% { transform: scale(0.96); } 60% { transform: scale(1.02); } 100% { transform: scale(1); } }
+  .coach-name { font-size: 11px; font-weight: 900; color: var(--gold); letter-spacing: 2px; }
+  #coachText { font-size: 13.5px; font-weight: 700; line-height: 1.4; color: var(--text); }
+  #coach.flash { animation: bubblePop 0.4s ease-out; }
+  @keyframes bubblePop { 0% { transform: scale(0.97); box-shadow: 0 0 0 2px var(--gold), 0 0 18px rgba(255,207,77,0.6); } 100% { transform: scale(1); } }
 
   /* =====================================================
      剋制小抄（手機版隱藏，電腦版才顯示）
      ===================================================== */
   #guide { display: none; }
   .guide-title {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 900;
     letter-spacing: 1px;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     display: flex;
     justify-content: space-between;
     align-items: baseline;
+    color: var(--gold);
   }
-  .guide-title span { font-size: 11px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+  .guide-title span { font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
   .guide-row {
     display: grid;
-    grid-template-columns: 92px 16px 1fr;
+    grid-template-columns: 96px 18px 1fr;
     align-items: center;
-    padding: 6px 4px;
-    font-size: 13px;
+    padding: 6px 2px;
+    font-size: 13.5px;
     border-top: 1px solid var(--line);
   }
-  .guide-row .foe { color: #ffb0ae; font-weight: 700; }
-  .guide-row .arrow { color: var(--muted); }
-  .guide-row .ans { color: #b9d4ff; }
+  .guide-row .foe { color: #ffb9b7; font-weight: 900; }
+  .guide-row .arrow { color: var(--gold); }
+  .guide-row .ans { color: #c6dcff; font-weight: 700; }
 
   /* =====================================================
      底部：音效、測試工具
@@ -419,29 +589,27 @@
   }
   .small-btn {
     flex: none;
-    font-size: 12px;
-    padding: 5px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--line);
-    background: var(--panel);
-    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+    padding: 6px 11px;
+    border-radius: 10px;
+    color: var(--text);
     cursor: pointer;
   }
+  .small-btn.off { color: var(--muted); }
   #testPanel {
     flex: 1;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--muted);
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 4px 8px;
+    border-radius: 10px;
+    padding: 5px 9px;
   }
-  #testPanel summary { cursor: pointer; padding: 1px 0; }
+  #testPanel summary { cursor: pointer; padding: 1px 0; font-weight: 700; }
   #testPanel .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0 2px; }
   #testPanel label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
   #testPanel button {
-    font-size: 12px; padding: 3px 8px; border-radius: 6px;
-    border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer;
+    font-size: 13px; padding: 3px 8px; border-radius: 7px;
+    border: 1px solid var(--edge); background: var(--panel-lo); color: var(--text); cursor: pointer;
   }
 
   /* =====================================================
@@ -455,24 +623,27 @@
     align-items: center;
     justify-content: center;
     padding: 16px;
-    background: rgba(6, 9, 16, 0.72);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
+    background: rgba(5, 8, 16, 0.74);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
   }
   .screen[hidden] { display: none; }
+  #fxCanvas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .sheet {
-    width: min(360px, 100%);
+    position: relative;
+    width: min(370px, 100%);
     max-height: 94vh;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 22px 20px 20px;
     text-align: center;
-    background: linear-gradient(180deg, #222c44, #161d2e);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 18px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
-    animation: sheetIn 0.35s cubic-bezier(.2,1.4,.5,1);
+    background: linear-gradient(180deg, var(--panel-hi), var(--panel-lo));
+    border: 1px solid var(--edge);
+    border-radius: 20px;
+    box-shadow: var(--shadow), 0 20px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08);
+    animation: sheetIn 0.4s cubic-bezier(.2,1.4,.5,1);
   }
-  @keyframes sheetIn { from { transform: translateY(20px) scale(0.95); opacity: 0; } }
+  @keyframes sheetIn { from { transform: translateY(24px) scale(0.92); opacity: 0; } }
   /* Logo 文字：金色漸層＋立體陰影 */
   .logo {
     font-size: 40px;
@@ -486,62 +657,54 @@
     filter: drop-shadow(0 3px 0 #6b3d00) drop-shadow(0 6px 10px rgba(0,0,0,0.5));
   }
   .logo-sub {
-    margin: 6px 0 16px;
-    font-size: 12px;
+    margin: 7px 0 16px;
+    font-size: 13px;
     letter-spacing: 3px;
     color: var(--muted);
   }
   .section-title {
-    font-size: 11px;
+    font-size: 12px;
+    font-weight: 700;
     letter-spacing: 2px;
-    color: var(--muted);
-    margin: 0 0 8px;
+    color: var(--gold);
+    margin: 0 0 10px;
     display: flex;
     align-items: center;
     gap: 8px;
   }
   .section-title::before, .section-title::after {
-    content: ""; flex: 1; height: 1px; background: var(--line);
+    content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--edge), transparent);
   }
   #deckPreview {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
+    gap: 9px;
     margin-bottom: 16px;
   }
-  #deckPreview .mini {
-    position: relative;
-    height: 58px;
-    border-radius: 8px;
-    background: var(--role);
-    background: linear-gradient(180deg, color-mix(in srgb, var(--role) 80%, white), color-mix(in srgb, var(--role) 55%, black));
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25);
-  }
-  #deckPreview .mini .e { font-size: 22px; line-height: 1.2; }
-  #deckPreview .mini .n { font-size: 9.5px; white-space: nowrap; }
-  #deckPreview .mini .gem { position: absolute; left: -5px; top: -5px; width: 18px; height: 18px; }
-  #deckPreview .mini .gem > b { font-size: 10px; }
+  #deckPreview .mini { height: 66px; }
+  #deckPreview .mini .art { font-size: 22px; bottom: 17px; border-radius: 8px; }
+  #deckPreview .mini .name { font-size: 10.5px; height: 14px; line-height: 14px; border-radius: 0 0 8px 8px; }
+  #deckPreview .mini .name.long { font-size: 9px; }
+  #deckPreview .mini .tag { font-size: 9px; line-height: 13px; padding: 0 4px; right: 4px; top: 4px; }
+  #deckPreview .mini .gem { position: absolute; left: -6px; top: -6px; width: 19px; height: 19px; z-index: 2; }
+  #deckPreview .mini .gem > b { font-size: 10.5px; }
   .howto {
     list-style: none;
     margin: 0 0 18px;
     padding: 0;
     text-align: left;
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1.5;
   }
   .howto li {
     display: flex;
-    gap: 8px;
-    padding: 5px 0;
+    gap: 9px;
+    padding: 6px 0;
     border-bottom: 1px solid var(--line);
   }
   .howto li b {
     flex: none;
-    width: 20px; height: 20px;
+    width: 21px; height: 21px;
     border-radius: 50%;
     background: var(--gold);
     color: #3a2a00;
@@ -570,29 +733,45 @@
   .btn-secondary {
     width: 100%;
     margin-top: 10px;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
-    padding: 9px 0;
+    padding: 10px 0;
     border-radius: 10px;
-    border: 1px solid rgba(255,255,255,0.15);
-    background: transparent;
-    color: var(--muted);
+    border: 1px solid var(--edge);
+    background: rgba(255,255,255,0.03);
+    color: var(--text);
     cursor: pointer;
   }
 
   /* 結算 */
   .ribbon {
+    position: relative;
+    overflow: hidden;
     margin: -22px -20px 14px;
     padding: 16px 0 12px;
-    border-radius: 18px 18px 0 0;
-    font-size: 32px;
+    border-radius: 20px 20px 0 0;
+    font-size: 34px;
     font-weight: 900;
-    letter-spacing: 4px;
+    letter-spacing: 6px;
     text-shadow: 0 3px 0 rgba(0,0,0,0.35);
   }
-  .ribbon.win { background: linear-gradient(180deg, #ffd45a, #e39a12); color: #4a2a00; }
-  .ribbon.lose { background: linear-gradient(180deg, #7a8296, #4a5063); color: #fff; }
-  .ribbon.draw { background: linear-gradient(180deg, #6fa0ff, #3a66c8); color: #fff; }
+  .ribbon.win { background: linear-gradient(180deg, #ffe07a, #e39a12); color: #4a2a00; }
+  .ribbon.lose { background: linear-gradient(180deg, #7d8599, #474d60); color: #fff; }
+  .ribbon.draw { background: linear-gradient(180deg, #74a5ff, #3a66c8); color: #fff; }
+  /* 勝利：橫幅閃過一道光；落敗：整張往下沉一下 */
+  .ribbon.win::after {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0; left: -40%;
+    width: 30%;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,0.75), transparent);
+    animation: ribbonShine 2.2s ease-in-out 0.4s infinite;
+  }
+  @keyframes ribbonShine { 0% { left: -40%; } 45%, 100% { left: 130%; } }
+  #overlay.win .sheet { animation: sheetIn 0.4s cubic-bezier(.2,1.4,.5,1), winGlow 1.6s ease-in-out 0.4s infinite alternate; }
+  @keyframes winGlow { to { box-shadow: var(--shadow), 0 0 40px rgba(255, 207, 77, 0.45), inset 0 1px 0 rgba(255,255,255,0.08); } }
+  #overlay.lose .sheet { animation: loseDrop 0.7s cubic-bezier(.3,1.5,.5,1); filter: saturate(0.6); }
+  @keyframes loseDrop { 0% { transform: translateY(-40px); opacity: 0; } 60% { transform: translateY(8px) rotate(-1deg); opacity: 1; } 80% { transform: translateY(-2px) rotate(0.5deg); } }
   #resultCrowns {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
@@ -600,28 +779,82 @@
     gap: 8px;
     margin-bottom: 8px;
   }
-  #resultCrowns .side { font-size: 11px; color: var(--muted); }
-  #resultCrowns .crowns { justify-content: center; font-size: 22px; }
-  #resultCrowns .vs { font-size: 13px; font-weight: 900; color: var(--muted); }
-  #resultReason { font-size: 13px; color: #cfd7ea; margin-bottom: 12px; }
-  .stats { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13px; }
-  .stats td { padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  #resultCrowns .side { font-size: 12px; color: var(--muted); font-weight: 700; }
+  #resultCrowns .crowns { justify-content: center; font-size: 24px; }
+  #resultCrowns .crowns span.on { animation: crownPop 0.6s cubic-bezier(.2,1.6,.5,1) backwards; }
+  #resultCrowns .crowns span.on:nth-child(2) { animation-delay: 0.15s; }
+  #resultCrowns .crowns span.on:nth-child(3) { animation-delay: 0.3s; }
+  #resultCrowns .vs { font-size: 13px; font-weight: 900; color: var(--gold); }
+  #resultReason { font-size: 14px; color: #d6deef; margin-bottom: 12px; }
+  .stats { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 14px; }
+  .stats td { padding: 7px 4px; border-bottom: 1px solid var(--line); }
   .stats td:first-child { text-align: left; color: var(--muted); }
   .stats td:last-child { text-align: right; font-weight: 900; }
   .advice {
     display: flex;
-    gap: 8px;
+    gap: 9px;
     align-items: center;
     text-align: left;
-    background: #f7f1e1;
-    color: #3a2c10;
-    border-radius: 10px;
-    padding: 9px 10px;
-    font-size: 13px;
+    background: linear-gradient(180deg, var(--panel-hi), var(--panel));
+    border: 1px solid var(--edge);
+    border-left: 3px solid var(--gold);
+    border-radius: 12px;
+    padding: 10px 11px;
+    font-size: 14px;
     font-weight: 700;
     margin-bottom: 16px;
   }
   .advice span { font-size: 22px; }
+
+  /* =====================================================
+     第 4 版新玩法：成就徽章（競技場上方跳出）、結算的成就清單
+     ===================================================== */
+  #achieveToast {
+    position: absolute;
+    left: 50%; top: 12px;
+    transform: translate(-50%, -30px);
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 16px 7px 9px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #2a2210, #171309);
+    border: 1.5px solid var(--gold);
+    box-shadow: 0 0 18px rgba(255, 207, 77, 0.55), 0 6px 16px rgba(0,0,0,0.5);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 5;
+  }
+  #achieveToast.show { animation: achIn 2.2s cubic-bezier(.2,1.4,.5,1) forwards; }
+  @keyframes achIn {
+    0% { opacity: 0; transform: translate(-50%, -30px) scale(0.8); }
+    12% { opacity: 1; transform: translate(-50%, 0) scale(1.05); }
+    20%, 85% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -12px) scale(0.95); }
+  }
+  #achieveToast .ach-icon { font-size: 24px; filter: drop-shadow(0 0 6px rgba(255,207,77,0.8)); }
+  #achieveToast small { display: block; font-size: 10.5px; color: var(--gold); letter-spacing: 2px; font-weight: 700; }
+  #achieveToast b { display: block; font-size: 15px; color: var(--gold-hi); }
+  .ach-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; text-align: left; }
+  .ach-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 10px;
+    background: linear-gradient(90deg, rgba(255, 207, 77, 0.16), rgba(255, 207, 77, 0.03));
+    border: 1px solid rgba(255, 207, 77, 0.35);
+    animation: achPop 0.45s cubic-bezier(.2,1.4,.5,1) backwards;
+  }
+  @keyframes achPop { from { transform: translateY(8px) scale(0.92); opacity: 0; } }
+  .ach-item:nth-child(2) { animation-delay: 0.12s; }
+  .ach-item:nth-child(3) { animation-delay: 0.24s; }
+  .ach-item:nth-child(4) { animation-delay: 0.36s; }
+  .ach-item .ach-icon { font-size: 22px; }
+  .ach-item b { display: block; font-size: 14px; color: var(--gold-hi); }
+  .ach-item small { display: block; font-size: 12px; color: var(--muted); }
+  .ach-none { font-size: 13px; color: var(--muted); padding: 4px 0 2px; text-align: center; }
 
   /* =====================================================
      寬螢幕（電腦）：競技場在左邊放大，介面放右側面板
@@ -648,33 +881,36 @@
     }
     #hud { grid-area: hud; }
     #arenaWrap { grid-area: arena; align-self: center; }
-    #elixirRow { grid-area: elixir; }
-    #handRow { grid-area: hand; }
-    #coach { grid-area: coach; height: 76px; }
+    #elixirRow { grid-area: elixir; padding: 9px 12px 9px 10px; }
+    #handRow { grid-area: hand; padding-top: 14px; }
+    #coach { grid-area: coach; height: 80px; }
     #footer { grid-area: footer; }
     #guide {
       grid-area: guide;
       display: block;
       align-self: start;
       padding: 10px 12px 4px;
-      background: linear-gradient(180deg, var(--panel-2), var(--panel));
-      border: 1px solid var(--line);
-      border-radius: 14px;
+      border-radius: var(--r-lg);
     }
-    .card { height: 104px; }
-    .card .art { font-size: 36px; bottom: 24px; }
-    .card .name { font-size: 12px; }
-    .card .gem { width: 26px; height: 26px; }
-    .card .gem > b { font-size: 14px; }
-    #nextCard { height: 76px; }
+    .card { height: 108px; }
+    .card .art { font-size: 38px; bottom: 23px; }
+    .card .name { font-size: 13px; height: 19px; line-height: 19px; }
+    .card .name.long { font-size: 11.5px; }
+    .card .tag { font-size: 11px; line-height: 16px; }
+    .card .gem { width: 28px; height: 28px; }
+    .card .gem > b { font-size: 15px; }
+    .card .need { font-size: 12px; }
+    #nextCard { height: 78px; }
+    #nextCard .art { font-size: 26px; }
     #timer { font-size: 26px; }
     .avatar { width: 36px; height: 36px; font-size: 21px; }
-    .pname { font-size: 14px; }
+    .pname { font-size: 15px; }
     .crowns { font-size: 16px; }
-    .cell { height: 20px; }
+    #elixirBar { height: 26px; }
+    #elixirFull { font-size: 13px; }
     #elixirGem { width: 40px; height: 40px; }
     #elixirGem > b { font-size: 20px; }
-    #coachText { font-size: 14px; }
+    #coachText { font-size: 15px; }
     .coach-avatar { width: 54px; height: 54px; font-size: 30px; }
   }
 
@@ -686,19 +922,28 @@
     .plate { padding: 3px 6px; }
     .avatar { width: 24px; height: 24px; font-size: 14px; }
     #timer { font-size: 18px; }
-    .card { height: 70px; }
-    .card .art { font-size: 23px; bottom: 19px; }
-    .card .name { font-size: 10px; bottom: 4px; }
-    #handRow { padding: 7px 7px 6px; }
-    #nextCard { height: 54px; }
+    .card { height: 72px; }
+    .card .art { font-size: 23px; bottom: 18px; }
+    .card .name { font-size: 11px; height: 15px; line-height: 15px; }
+    .card .name.long { font-size: 9.5px; }
+    .card .tag { font-size: 9px; line-height: 13px; padding: 0 4px; right: 4px; top: 4px; }
+    .card .need { font-size: 10px; padding: 0 5px; }
+    .card .gem { width: 21px; height: 21px; }
+    .card .gem > b { font-size: 12px; }
+    #handRow { padding: 8px 7px 6px; }
+    #nextBox { width: 50px; }
+    #nextCard { width: 50px; height: 56px; }
     #nextCard .art { font-size: 17px; bottom: 15px; }
-    #coach { height: 46px; }
-    .coach-avatar { width: 36px; height: 36px; font-size: 20px; }
-    #coachText { font-size: 11.5px; }
+    #nextCard .name { height: 12px; line-height: 12px; font-size: 9px; }
+    #coach { height: 48px; padding: 4px 8px 4px 6px; }
+    .coach-avatar { width: 34px; height: 34px; font-size: 19px; }
+    #coachText { font-size: 12px; line-height: 1.35; }
     .coach-name { display: none; }
+    #elixirRow { padding: 5px 8px 5px 7px; }
     #elixirGem { width: 28px; height: 28px; }
     #elixirGem > b { font-size: 14px; }
-    .cell { height: 13px; }
+    #elixirBar { height: 17px; }
+    #elixirFull { font-size: 11px; }
   }
 </style>
 </head>
@@ -724,12 +969,19 @@
   <div id="arenaWrap">
     <canvas id="arena"></canvas>
     <div id="msg" class="hide"></div>
+    <div id="achieveToast"></div>
   </div>
 
-  <!-- 聖水條 -->
+  <!-- 聖水條（一整條流動的聖水＋10 格刻度） -->
   <div id="elixirRow">
     <span class="gem" id="elixirGem"><b id="elixirNum">5</b></span>
-    <div id="elixirBar"></div>
+    <div id="elixirBar">
+      <div id="elixirCharge"></div>
+      <div id="elixirFill"></div>
+      <div class="ticks"></div>
+      <div id="elixirNeed"></div>
+      <span id="elixirFull">聖水已滿！快出牌</span>
+    </div>
   </div>
 
   <!-- 手牌 4 張 ＋ 下一張 -->
@@ -793,8 +1045,9 @@
   </div>
 </div>
 
-<!-- 結算畫面 -->
+<!-- 結算畫面（fxCanvas：勝利彩帶、落敗灰雨） -->
 <div class="screen" id="overlay" hidden>
+  <canvas id="fxCanvas"></canvas>
   <div class="sheet">
     <div class="ribbon" id="resultTitle"></div>
     <div id="resultCrowns"></div>
@@ -880,6 +1133,27 @@ const ENEMY_TIPS = {
 };
 const COMBO_TIP = '他們在配合：坦克吸引塔，衝鋒豬跟在後面，先處理衝鋒豬';
 
+// 第 4 版新玩法（只有回饋和統計，不給任何獎勵、不影響戰鬥）
+// 剋制連擊：敵方出牌後 5 秒內，你出了剋制小抄上對應的牌 → 「剋制！」
+// （對照表和畫面上的剋制小抄完全一樣；敵方出法師小抄上沒有，所以不算）
+const COUNTER_WINDOW = 5;
+const GUIDE_COUNTERS = {
+  hog:     ['cannon', 'minions'],
+  tank:    ['minions', 'mage'],
+  bomb:    ['cannon', 'minions'],
+  bats:    ['mage'],
+  minions: ['mage', 'bats'],
+  healer:  ['mage'],
+};
+// 對戰成就（只記這一場，不存起來）
+const ACHIEVEMENTS = {
+  perfect: { icon: '🛡️', name: '完美防守', desc: '敵方衝鋒豬或炸彈兵被擋下，塔沒掉血' },
+  nowaste: { icon: '💧', name: '零浪費',   desc: '整場浪費聖水低於 1' },
+  crowns3: { icon: '👑', name: '三冠王',   desc: '拆掉敵方三座塔' },
+  rush:    { icon: '⚡', name: '快攻',     desc: '開場 60 秒內拆掉一座塔' },
+};
+const ACHIEVEMENT_ORDER = ['perfect', 'nowaste', 'crowns3', 'rush'];
+
 // 炸彈兵的特別設定（和使用者討論後決定）
 const BOMB = {
   drainPerSec: 34,   // 被「塔」打到後，每秒自己扣 34 血
@@ -914,8 +1188,13 @@ const AI_COUNTERS = {
 
 // 顏色
 const COLOR = {
-  me: '#4c8df6', meDark: '#1f4fa8', meLight: '#a9cbff', meBar: '#5aa9ff',
-  enemy: '#ef5350', enemyDark: '#a12424', enemyLight: '#ffb3b0', enemyBar: '#ff6b6b',
+  me: '#4f94ff', meDark: '#1f4fa8', meLight: '#a9cbff', meBar: '#5aa9ff',
+  enemy: '#ff5a5f', enemyDark: '#a6232b', enemyLight: '#ffb3b0', enemyBar: '#ff6b6b',
+};
+
+// 卡牌右上角的類型標籤（只影響外觀）
+const ROLE_LABEL = {
+  core: '核心', troop: '地面', air: '空中', magic: '範圍', support: '輔助', building: '建築',
 };
 
 // =====================================================
@@ -927,6 +1206,11 @@ const handEl = document.getElementById('hand');
 const nextEl = document.getElementById('nextCard');
 const elixirBarEl = document.getElementById('elixirBar');
 const elixirNumEl = document.getElementById('elixirNum');
+const elixirFillEl = document.getElementById('elixirFill');
+const elixirChargeEl = document.getElementById('elixirCharge');
+const elixirNeedEl = document.getElementById('elixirNeed');
+const elixirGemEl = document.getElementById('elixirGem');
+const elixirRowEl = document.getElementById('elixirRow');
 const timerEl = document.getElementById('timer');
 const timeLabelEl = document.getElementById('timeLabel');
 const myCrownsEl = document.getElementById('myCrowns');
@@ -940,14 +1224,27 @@ const startScreenEl = document.getElementById('startScreen');
 const coachTextEl = document.getElementById('coachText');
 const coachEl = document.getElementById('coach');
 
-// 聖水條的 10 格
-const elixirCells = [];
-for (let i = 0; i < ELIXIR_MAX; i++) {
-  const cell = document.createElement('div');
-  cell.className = 'cell';
-  cell.innerHTML = '<i></i>';
-  elixirBarEl.appendChild(cell);
-  elixirCells.push(cell);
+// 重新播放某個 CSS 動畫（先拿掉 class，強制重排，再加回去）
+function replayClass(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
+
+// 聖水不夠時的提示：聖水條搖一下，並用紅色虛線框標出這張牌需要的量
+function flashElixirNeed(cost) {
+  elixirNeedEl.style.width = (cost / ELIXIR_MAX * 100) + '%';
+  replayClass(elixirNeedEl, 'show');
+  replayClass(elixirBarEl, 'short');
+}
+
+// 出牌時從聖水滴飄出「-4」
+function elixirPop(cost) {
+  const el = document.createElement('span');
+  el.className = 'elixir-pop';
+  el.textContent = '-' + cost;
+  elixirRowEl.appendChild(el);
+  setTimeout(() => el.remove(), 950);
 }
 
 // =====================================================
@@ -1003,22 +1300,40 @@ function noise(dur, vol = 0.15, cutoff = 1200, delay = 0) {
 function sfx(name) {
   if (!SFX.on || !SFX.ctx) return;
   const now = performance.now();
-  const gap = { arrow: 90, hit: 70, heal: 150, deploy: 60 }[name] || 0;
+  const gap = { arrow: 90, hit: 70, heal: 150, deploy: 60, towerHit: 110, die: 70 }[name] || 0;
   if (gap && now - (SFX.last[name] || 0) < gap) return;
   SFX.last[name] = now;
   switch (name) {
-    case 'select': tone(880, 0.06, 'triangle', 0.08); break;
-    case 'error':  tone(180, 0.15, 'square', 0.05, 120); break;
-    case 'deploy': tone(220, 0.14, 'sine', 0.18, 70); noise(0.08, 0.05, 600); break;
+    case 'select': tone(880, 0.06, 'triangle', 0.08); tone(1320, 0.05, 'triangle', 0.04, null, 0.04); break;
+    case 'error':  tone(200, 0.09, 'square', 0.05, 150); tone(150, 0.14, 'square', 0.05, 100, 0.1); break;   // 「嗶嗶」兩聲低音
+    case 'deploy': tone(240, 0.16, 'sine', 0.2, 70); noise(0.1, 0.07, 700); tone(520, 0.08, 'triangle', 0.04, 780); break;
     case 'arrow':  tone(1400, 0.05, 'triangle', 0.025, 700); break;
     case 'hit':    noise(0.06, 0.06, 2500); break;
+    case 'towerHit': noise(0.09, 0.09, 900); tone(140, 0.09, 'sine', 0.08, 90); break;            // 打到塔的悶響
+    case 'die':    tone(520, 0.12, 'triangle', 0.06, 160); noise(0.12, 0.05, 1500); break;       // 單位陣亡「噗」
     case 'heal':   tone(660, 0.12, 'sine', 0.06, 990); break;
     case 'boom':   noise(0.45, 0.3, 500); tone(90, 0.4, 'sine', 0.25, 40); break;
-    case 'towerDown': noise(0.8, 0.35, 350); tone(70, 0.7, 'sine', 0.3, 30); break;
+    case 'towerDown':                                                                               // 塔倒塌：轟隆＋碎石落下
+      noise(0.9, 0.38, 380); tone(70, 0.8, 'sine', 0.32, 28);
+      for (let i = 0; i < 5; i++) noise(0.08, 0.08, 1800, 0.25 + i * 0.09);
+      break;
+    case 'crown':  [784, 988, 1319].forEach((f, i) => tone(f, 0.18, 'triangle', 0.08, null, 0.35 + i * 0.09)); break;   // 拆掉敵塔：上升音
+    case 'towerLost': [330, 262].forEach((f, i) => tone(f, 0.28, 'sawtooth', 0.04, null, 0.35 + i * 0.18)); break;      // 我方塔倒：下降音
+    case 'full':   tone(988, 0.1, 'sine', 0.06); tone(1319, 0.16, 'sine', 0.06, null, 0.09); break;                    // 聖水滿了「叮咚」
+    case 'counter': [660, 880, 1175].forEach((f, i) => tone(f, 0.12, 'triangle', 0.07, null, i * 0.06)); break;           // 剋制成功：快速上升三音
+    case 'achieve': [784, 1047, 1319, 1568].forEach((f, i) => tone(f, 0.22, 'sine', 0.07, null, i * 0.08)); tone(2093, 0.4, 'sine', 0.03, null, 0.32); break;   // 成就：閃亮音階
     case 'beep':   tone(660, 0.12, 'square', 0.05); break;
     case 'go':     tone(880, 0.25, 'square', 0.06); tone(1320, 0.3, 'square', 0.04, null, 0.08); break;
-    case 'win':    [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.25, 'triangle', 0.1, null, i * 0.12)); break;
-    case 'lose':   [392, 330, 262, 196].forEach((f, i) => tone(f, 0.3, 'triangle', 0.09, null, i * 0.15)); break;
+    case 'win':                                                                                     // 勝利號角
+      [523, 659, 784].forEach((f, i) => tone(f, 0.18, 'triangle', 0.1, null, i * 0.11));
+      [1047, 1319, 1568].forEach(f => tone(f, 0.7, 'triangle', 0.06, null, 0.36));
+      tone(523, 0.7, 'square', 0.03, null, 0.36);
+      break;
+    case 'draw':   [523, 659, 587, 523].forEach((f, i) => tone(f, 0.22, 'triangle', 0.08, null, i * 0.13)); break;
+    case 'lose':                                                                                    // 落敗：慢慢往下的音
+      [392, 349, 311, 262].forEach((f, i) => tone(f, 0.35, 'triangle', 0.09, null, i * 0.2));
+      tone(196, 0.9, 'sawtooth', 0.035, 130, 0.8);
+      break;
   }
 }
 
@@ -1026,6 +1341,7 @@ document.getElementById('soundBtn').addEventListener('click', (e) => {
   audioInit();
   SFX.on = !SFX.on;
   e.currentTarget.textContent = SFX.on ? '🔊 音效開' : '🔇 音效關';
+  e.currentTarget.classList.toggle('off', !SFX.on);
 });
 
 // =====================================================
@@ -1054,6 +1370,9 @@ function newGame() {
     lastMinuteShown: false,    // 「最後一分鐘」是否提示過
     // 結算用的統計
     stats: { plays: 0, spent: 0, wasted: 0 },
+    // 剋制連擊：等著被剋制的敵方出牌、目前連擊、成功次數、最高連擊、可以剋制的敵方出牌數
+    counter: { watch: [], combo: 0, hits: 0, best: 0, chances: 0 },
+    achieved: [],       // 這場拿到的成就（依拿到的順序）
     // 教練提示的狀態
     coach: {
       seenMine: new Set(),    // 已經介紹過的自己的牌
@@ -1073,6 +1392,10 @@ function newGame() {
   dealDeck(G);
   dealDeck(G.ai);
   overlayEl.hidden = true;
+  stopResultFx();
+  clearAchieveToast();
+  UI.wasFull = false;
+  UI.poor = [];
   showMsg('');
   renderHand();
   coach('點一張牌，再點你的半場來下牌');
@@ -1131,6 +1454,75 @@ function coachAfterEnemyPlay(id) {
     coach(ENEMY_TIPS[id]);
   }
   if (id === 'tank') c.lastTankTime = elapsed;
+}
+
+// =====================================================
+// 剋制連擊（第 4 版，只有回饋和統計）
+// =====================================================
+
+// 敵方出牌：小抄上有剋制方法的牌，記下來等 5 秒
+function noteEnemyPlay(id) {
+  if (!GUIDE_COUNTERS[id]) return;
+  G.counter.watch.push({ id, time: GAME_TIME - G.timeLeft });
+  G.counter.chances += 1;
+}
+
+// 自己出牌：5 秒內有敵方出的牌被這張剋制 → 「剋制！」
+// 每一次敵方出牌只能被剋制一次；同時有好幾張時，算最早出的那張
+function checkCounter(id, x, y) {
+  const k = G.counter;
+  const now = GAME_TIME - G.timeLeft;
+  const hit = k.watch.find(w => now - w.time <= COUNTER_WINDOW && GUIDE_COUNTERS[w.id].includes(id));
+  if (!hit) return;
+  k.watch.splice(k.watch.indexOf(hit), 1);
+  k.combo += 1;
+  k.hits += 1;
+  k.best = Math.max(k.best, k.combo);
+  const label = k.combo >= 2 ? `剋制！×${k.combo}` : '剋制！';
+  G.effects.push({ kind: 'counter', x: Math.min(Math.max(x, 55), W - 55), y: Math.max(y - 32, 56), text: label, sub: `${CARDS[id].name} 剋 ${CARDS[hit.id].name}`, t: 1.1, max: 1.1 });
+  G.effects.push({ kind: 'ring', x, y: y + 6, r0: 10, r1: 48, color: '#ffcf4d', width: 4, t: 0.5, max: 0.5 });
+  emit(x, y - 10, 14, { color: '#ffe27a', speed: 90, life: 0.6, size: 2.5, up: 20 });
+  sfx('counter');
+}
+
+// 每格檢查：超過 5 秒沒被剋制的敵方出牌 → 連擊中斷
+function expireCounters() {
+  const k = G.counter;
+  const now = GAME_TIME - G.timeLeft;
+  const left = k.watch.filter(w => now - w.time <= COUNTER_WINDOW);
+  if (left.length < k.watch.length) k.combo = 0;
+  k.watch = left;
+}
+
+// =====================================================
+// 對戰成就（第 4 版，只記這一場）
+// =====================================================
+const achieveEl = document.getElementById('achieveToast');
+const achieveQueue = [];
+let achieveBusy = false;
+
+function award(key) {
+  if (!G || G.achieved.includes(key)) return;
+  G.achieved.push(key);
+  achieveQueue.push(key);
+  if (!achieveBusy) nextAchieveToast();
+}
+
+// 競技場上方依序跳出成就徽章（一次一個，每個 2.2 秒）
+function nextAchieveToast() {
+  const key = achieveQueue.shift();
+  if (!key) { achieveBusy = false; achieveEl.classList.remove('show'); return; }
+  achieveBusy = true;
+  const a = ACHIEVEMENTS[key];
+  achieveEl.innerHTML = `<span class="ach-icon">${a.icon}</span><span><small>成就達成</small><b>${a.name}</b></span>`;
+  replayClass(achieveEl, 'show');
+  sfx('achieve');
+  setTimeout(nextAchieveToast, 2200);
+}
+
+function clearAchieveToast() {
+  achieveQueue.length = 0;
+  achieveEl.classList.remove('show');
 }
 
 // 建立雙方各 3 座塔
@@ -1192,11 +1584,13 @@ function randRange(a, b) {
 }
 
 // 顯示提示訊息，幾秒後自動淡出
+// kind：'warn'（紅框，錯誤）、'good'（金框，好消息）、不填就是一般
 let msgTimer = null;
-function showMsg(text, ms = 1500) {
+function showMsg(text, ms = 1500, kind = '') {
   clearTimeout(msgTimer);
   if (!text) { msgEl.classList.add('hide'); return; }
   msgEl.textContent = text;
+  msgEl.className = kind;
   msgEl.classList.remove('hide');
   msgTimer = setTimeout(() => msgEl.classList.add('hide'), ms);
 }
@@ -1204,25 +1598,33 @@ function showMsg(text, ms = 1500) {
 // =====================================================
 // 手牌畫面
 // =====================================================
+// 卡面：emoji、類型標籤、名字（手牌、下一張、開始畫面共用）
 function cardHTML(c) {
   const long = c.name.length >= 5 ? ' long' : '';
-  return `<span class="art">${c.emoji}</span>` +
+  return `<span class="art"><i>${c.emoji}</i></span>` +
+         `<span class="tag">${ROLE_LABEL[c.role]}</span>` +
          `<span class="name stroke${long}">${c.name}</span>`;
 }
 
-function renderHand() {
+// 介面狀態（只影響外觀）：聖水是否剛滿、每張手牌上一格是不是「聖水不夠」
+const UI = { wasFull: false, poor: [] };
+
+// enterSlot：剛補進新牌的位置（播放滑進來的動畫）
+function renderHand(enterSlot = -1) {
   handEl.innerHTML = '';
   G.hand.forEach((id, i) => {
     const c = CARDS[id];
     const btn = document.createElement('button');
-    btn.className = 'card role-' + c.role;
-    btn.innerHTML = cardHTML(c) + `<span class="shade"></span><span class="gem"><b>${c.cost}</b></span>`;
+    btn.className = 'card role-' + c.role + (i === enterSlot ? ' enter' : '');
+    btn.innerHTML = cardHTML(c) + `<span class="shade"></span><span class="need"></span><span class="gem"><b>${c.cost}</b></span>`;
     btn.addEventListener('click', () => onCardClick(i));
+    btn.addEventListener('animationend', (e) => { if (e.animationName === 'cardIn') btn.classList.remove('enter'); });
     handEl.appendChild(btn);
   });
   const n = CARDS[G.next];
   nextEl.className = 'role-' + n.role;
   nextEl.innerHTML = cardHTML(n);
+  UI.poor = [];
   updateHandState();
 }
 
@@ -1237,7 +1639,28 @@ function updateHandState() {
     // 暗色遮罩高度 = 還差多少聖水（像在充能）
     const ratio = poor ? 1 - Math.min(1, G.elixir / c.cost) : 0;
     cards[i].querySelector('.shade').style.height = (ratio * 100) + '%';
+    if (poor) {
+      const txt = '還差 ' + (c.cost - Math.floor(G.elixir));
+      const needEl = cards[i].querySelector('.need');
+      if (needEl.textContent !== txt) needEl.textContent = txt;
+    }
+    // 從「不夠」變成「夠了」：卡面閃一道光
+    if (UI.poor[i] === true && !poor && G.started && !G.over) replayClass(cards[i], 'ready');
+    UI.poor[i] = poor;
   }
+}
+
+// 出牌時，複製一張卡往上飛走（只是動畫）
+function flyCard(i) {
+  const src = handEl.children[i];
+  if (!src) return;
+  const r = src.getBoundingClientRect();
+  const ghost = src.cloneNode(true);
+  ghost.classList.remove('selected', 'enter', 'ready');
+  ghost.classList.add('card-ghost');
+  Object.assign(ghost.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+  document.body.appendChild(ghost);
+  setTimeout(() => ghost.remove(), 450);
 }
 
 // 點手牌
@@ -1253,9 +1676,11 @@ function onCardClick(i) {
   // 聖水不夠 → 不能選，顯示提示
   const c = CARDS[G.hand[i]];
   if (Math.floor(G.elixir) < c.cost) {
-    showMsg('聖水不夠');
+    showMsg(`聖水不夠（還差 ${c.cost - Math.floor(G.elixir)}）`, 1500, 'warn');
     coach('聖水不夠，等一下再出');
     sfx('error');
+    replayClass(handEl.children[i], 'shake');
+    flashElixirNeed(c.cost);
     return;
   }
   G.selected = i;
@@ -1340,29 +1765,37 @@ canvas.addEventListener('pointerdown', (e) => {
   if (canDeploy('me', x, y)) {
     // 可以下牌的位置：下牌
     if (Math.floor(G.elixir) < c.cost) {
-      showMsg('聖水不夠');
+      showMsg(`聖水不夠（還差 ${c.cost - Math.floor(G.elixir)}）`, 1500, 'warn');
       sfx('error');
+      flashElixirNeed(c.cost);
       return;
     }
+    const slot = G.selected;
+    flyCard(slot);
+    elixirPop(c.cost);
     spawnUnits('me', id, x, y);
     G.elixir -= c.cost;
     G.stats.plays += 1;
     G.stats.spent += c.cost;
     cycleCard(G, G.selected);
     G.selected = null;
-    renderHand();
+    renderHand(slot);
     coachAfterMyPlay(id);
+    checkCounter(id, x, y);
   } else if (testModeEl.checked && canDeploy('enemy', x, y)) {
     // 測試模式：替敵方下牌（不扣聖水、不換手牌，選取保留方便連續測試）
     spawnUnits('enemy', id, x, y);
     showMsg('（測試）已替敵方下 ' + c.name);
     coachAfterEnemyPlay(id);
+    noteEnemyPlay(id);
   } else if (onTower(x, y) || Math.abs(y - RIVER_Y) <= RIVER_HALF) {
-    showMsg('不能下在塔上或河裡');
+    showMsg('不能下在塔上或河裡', 1500, 'warn');
     sfx('error');
+    G.effects.push({ kind: 'deny', x, y, t: 0.5, max: 0.5 });
   } else {
-    showMsg('紅色區域不能下牌');
+    showMsg('紅色區域不能下牌', 1500, 'warn');
     sfx('error');
+    G.effects.push({ kind: 'deny', x, y, t: 0.5, max: 0.5 });
   }
 });
 
@@ -1394,8 +1827,11 @@ function spawnUnits(team, id, x, y) {
   // 落地的煙塵
   setTimeout(() => {
     if (!G) return;
-    emit(x, y, 14, { color: '#d9c7a0', speed: 40, life: 0.5, size: 3, up: 8 });
-    G.effects.push({ kind: 'spawn', x, y, color: team === 'me' ? COLOR.me : COLOR.enemy, t: 0.45, max: 0.45 });
+    const color = team === 'me' ? COLOR.me : COLOR.enemy;
+    emit(x, y, 18, { color: '#e2d2ab', speed: 55, life: 0.55, size: 3, up: 8 });
+    G.effects.push({ kind: 'spawn', x, y, color, t: 0.45, max: 0.45 });
+    G.effects.push({ kind: 'ring', x, y: y + 6, r0: 6, r1: 34, color: '#ffffff', width: 3, t: 0.35, max: 0.35 });
+    G.effects.push({ kind: 'pillar', x, y, color, t: 0.4, max: 0.4 });
   }, 200);
   sfx('deploy');
 }
@@ -1505,6 +1941,7 @@ function attackTower(u, t) {
     }
     return;
   }
+  u.hitTower = true;   // 成就「完美防守」用：這個單位打到過塔
   damageTower(t, u.card.dmg);
   if (u.card.splash) {
     for (const o of G.units) {
@@ -1632,7 +2069,9 @@ function updateUnit(u, dt) {
 function damageUnit(u, dmg, byTower) {
   if (u.dead) return;
   u.hp -= dmg;
-  u.flashUntil = performance.now() + 90;
+  u.flashUntil = performance.now() + 120;
+  // 傷害數字：打到敵方是黃色、我方被打是紅色
+  pushNum(u.x + randRange(-6, 6), u.y - 22, '-' + Math.round(dmg), u.team === 'enemy' ? '#ffe066' : '#ff8a80', 11);
   // 炸彈兵只有被「塔」打到才開始倒扣血並加速（被單位打不會，這樣才攔得住它）
   if (u.card.bomb && byTower) u.draining = true;
   if (u.hp <= 0) {
@@ -1653,6 +2092,7 @@ function explode(u) {
   sfx('boom');
   for (const t of G.towers) {
     if (t.team !== u.team && t.alive && dist(u, t) - TOWER_HIT <= BOMB.radius) {
+      u.hitTower = true;
       damageTower(t, BOMB.towerDmg);
     }
   }
@@ -1696,21 +2136,39 @@ function updateTower(t, dt) {
 function damageTower(t, dmg) {
   if (!t.alive || G.over) return;
   t.hp -= dmg;
-  t.flashUntil = performance.now() + 100;
-  G.effects.push({ kind: 'num', x: t.x + randRange(-10, 10), y: t.y - 14, text: '-' + dmg, color: '#ffffff', t: 0.8, max: 0.8 });
+  const now = performance.now();
+  t.flashUntil = now + 120;
+  t.shakeUntil = now + 160;   // 塔本身抖一下（只是畫面）
+  pushNum(t.x + randRange(-10, 10), t.y - 14, '-' + dmg, t.team === 'enemy' ? '#ffe066' : '#ff8a80', dmg >= 100 ? 17 : 14);
+  emit(t.x + randRange(-12, 12), t.y - 6, 3, { color: '#cfc6b4', speed: 60, life: 0.45, size: 2.2, gravity: 200 });
+  sfx('towerHit');
   if (t.hp <= 0) {
     t.hp = 0;
     t.alive = false;
+    t.fellAt = now;
+    // 塔倒塌：爆炸火光、石塊碎片四散、塵土、衝擊波、白光、畫面大震動
     G.effects.push({ kind: 'boom', x: t.x, y: t.y, t: 0.7, max: 0.7 });
+    G.effects.push({ kind: 'ring', x: t.x, y: t.y + 8, r0: 20, r1: 95, color: '#fff3d0', width: 5, t: 0.55, max: 0.55 });
+    G.effects.push({ kind: 'flash', t: 0.25, max: 0.25 });
+    const team = t.team === 'me' ? COLOR.me : COLOR.enemy;
+    for (let i = 0; i < 18; i++) {
+      emitChunk(t.x + randRange(-14, 14), t.y + randRange(-14, 8), i % 4 === 0 ? team : (i % 2 ? '#d9d1c1' : '#8f887b'));
+    }
     emit(t.x, t.y, 30, { color: '#a59d8e', speed: 130, life: 0.9, size: 4, gravity: 160 });
-    emit(t.x, t.y, 16, { color: '#5f574e', speed: 40, life: 1.4, size: 9, up: 25 });
-    G.shake = Math.max(G.shake, 11);
+    emit(t.x, t.y, 22, { color: '#6c645a', speed: 55, life: 1.6, size: 10, up: 25 });
+    G.shake = Math.max(G.shake, 14);
     sfx('towerDown');
+    sfx(t.team === 'enemy' ? 'crown' : 'towerLost');
+    // 成就：開場 60 秒內拆塔（快攻）、拆掉三座塔（三冠王）
+    if (t.team === 'enemy') {
+      if (GAME_TIME - G.timeLeft <= 60) award('rush');
+      if (killsBy('me') === 3) award('crowns3');
+    }
     // 國王塔倒 → 對方立刻獲勝
     if (t.type === 'king') {
       endGame(t.team === 'enemy' ? 'win' : 'lose', t.team === 'enemy' ? '你摧毀了敵方國王塔！' : '我方國王塔被摧毀了…');
     } else {
-      showMsg(t.team === 'enemy' ? '摧毀敵方公主塔！' : '我方公主塔被摧毀了');
+      showMsg(t.team === 'enemy' ? '👑 摧毀敵方公主塔！' : '我方公主塔被摧毀了', 1800, t.team === 'enemy' ? 'good' : 'warn');
       if (t.team === 'enemy') coach('這條路的公主塔倒了，現在可以集中打國王塔');
     }
   }
@@ -1728,6 +2186,7 @@ function aiPlay(handIndex, x, y) {
   cycleCard(ai, handIndex);
   spawnUnits('enemy', id, x, y);
   coachAfterEnemyPlay(id);
+  noteEnemyPlay(id);
 }
 
 // 從想要的位置開始，往自己後方找一個可以下牌的點
@@ -1858,8 +2317,11 @@ function endGame(result, reason) {
   if (G.over) return;
   G.over = true;
   G.selected = null;
+  G.result = result;
   updateHandState();
-  sfx(result === 'lose' ? 'lose' : 'win');
+  sfx(result);   // 'win'、'lose'、'draw' 各有自己的音效
+  // 競技場中央先跳出大字（結算畫面 0.7 秒後才出現）
+  G.effects.push({ kind: 'banner', text: { win: '勝利！', lose: '落敗…', draw: '平手' }[result], result, t: 1.2, max: 1.2 });
   const titleEl = document.getElementById('resultTitle');
   titleEl.textContent = { win: '勝利', lose: '落敗', draw: '平手' }[result];
   titleEl.className = 'ribbon ' + result;
@@ -1877,6 +2339,21 @@ function endGame(result, reason) {
   if (st.wasted > 5) advice = '你浪費了不少聖水，聖水滿的時候要記得出牌';
   else if (avg > 4) advice = '你的出牌偏貴，可以多搭配便宜的牌';
   else advice = '聖水運用得不錯，繼續保持';
+
+  // 第 4 版：成就「零浪費」在結算時判斷
+  if (st.wasted < 1) award('nowaste');
+  // 第 4 版：剋制連擊的教練建議（另外一行，不影響上面原本的建議）
+  const k = G.counter;
+  let counterAdvice = '';
+  if (k.hits >= 3) counterAdvice = '剋制得很漂亮！看對手出什麼再應對，就是這個遊戲的關鍵';
+  else if (k.chances >= 3 && k.hits === 0) counterAdvice = '敵方出牌後，試試用剋制小抄上的牌來應對';
+  const achList = G.achieved.length
+    ? G.achieved.map(key => {
+        const a = ACHIEVEMENTS[key];
+        return `<div class="ach-item"><span class="ach-icon">${a.icon}</span><span><b>${a.name}</b><small>${a.desc}</small></span></div>`;
+      }).join('')
+    : '<div class="ach-none">這場沒有拿到成就，再接再厲！</div>';
+
   document.getElementById('resultDetail').innerHTML =
     `<table class="stats">` +
     `<tr><td>摧毀塔數</td><td>你 ${killsBy('me')} ： 電腦 ${killsBy('enemy')}</td></tr>` +
@@ -1884,16 +2361,120 @@ function endGame(result, reason) {
     `<tr><td>總花費聖水</td><td>${st.spent}</td></tr>` +
     `<tr><td>浪費聖水</td><td>${st.wasted.toFixed(1)}</td></tr>` +
     `<tr><td>平均每張費用</td><td>${avg.toFixed(1)}（牌組平均 ${deckAvg.toFixed(2)}）</td></tr>` +
+    `<tr><td>成功剋制</td><td>${k.hits} 次（最高連擊 ×${k.best}）</td></tr>` +
     `</table>` +
-    `<div class="advice"><span>🧑‍🏫</span>${advice}</div>`;
+    `<div class="section-title">這場拿到的成就</div>` +
+    `<div class="ach-list">${achList}</div>` +
+    `<div class="advice"><span>🧑‍🏫</span><div>${advice}${counterAdvice ? '<br>' + counterAdvice : ''}</div></div>`;
   // 等爆炸特效播一下再跳出結算
-  setTimeout(() => { overlayEl.hidden = false; }, 700);
+  const thisGame = G;
+  setTimeout(() => {
+    if (G !== thisGame) return;   // 這段時間內已經重新開始就不要跳出
+    overlayEl.className = 'screen ' + result;
+    overlayEl.hidden = false;
+    startResultFx(result);
+  }, 700);
+}
+
+// =====================================================
+// 結算畫面特效：勝利 → 彩帶從上面噴下來；落敗 → 灰色細雨；平手 → 藍色光點
+// =====================================================
+const fxCanvas = document.getElementById('fxCanvas');
+const fxCtx = fxCanvas.getContext('2d');
+let fxParts = [];
+let fxRaf = null;
+let fxMode = null;
+
+function startResultFx(result) {
+  stopResultFx();
+  fxMode = result;
+  const w = fxCanvas.width = window.innerWidth;
+  const h = fxCanvas.height = window.innerHeight;
+  fxParts = [];
+  if (result === 'win') {
+    // 從畫面上方左右兩側噴出彩帶
+    const colors = ['#ffcf4d', '#ff6fa8', '#4f94ff', '#5fdc8b', '#ffffff', '#e05cf5'];
+    for (let i = 0; i < 160; i++) {
+      const fromLeft = i % 2 === 0;
+      fxParts.push({
+        x: fromLeft ? -10 : w + 10, y: h * 0.25 + Math.random() * h * 0.2,
+        vx: (fromLeft ? 1 : -1) * (180 + Math.random() * 380), vy: -250 - Math.random() * 380,
+        w: 5 + Math.random() * 5, h: 8 + Math.random() * 8,
+        rot: Math.random() * 6, vr: (Math.random() - 0.5) * 14,
+        color: colors[i % colors.length], delay: Math.random() * 0.5,
+      });
+    }
+  }
+  let last = performance.now();
+  let elapsed = 0;
+  const step = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    elapsed += dt;
+    fxCtx.clearRect(0, 0, w, h);
+    if (fxMode === 'win') {
+      // 持續從上方飄落一些彩帶
+      if (elapsed > 1 && elapsed < 6 && Math.random() < 0.5) {
+        fxParts.push({ x: Math.random() * w, y: -10, vx: (Math.random() - 0.5) * 60, vy: 40, w: 5 + Math.random() * 4, h: 8 + Math.random() * 6,
+          rot: Math.random() * 6, vr: (Math.random() - 0.5) * 10, color: ['#ffcf4d', '#ff6fa8', '#4f94ff', '#5fdc8b'][Math.floor(Math.random() * 4)], delay: 0 });
+      }
+      for (const p of fxParts) {
+        if (p.delay > 0) { p.delay -= dt; continue; }
+        p.vy += 520 * dt;
+        p.vx *= 0.985;
+        p.vy = Math.min(p.vy, 160);       // 像紙片一樣慢慢飄
+        p.x += p.vx * dt + Math.sin(now / 300 + p.rot) * 0.6;
+        p.y += p.vy * dt;
+        p.rot += p.vr * dt;
+        fxCtx.save();
+        fxCtx.translate(p.x, p.y);
+        fxCtx.rotate(p.rot);
+        fxCtx.scale(1, Math.abs(Math.cos(p.rot * 1.3)) + 0.15);   // 翻轉的感覺
+        fxCtx.fillStyle = p.color;
+        fxCtx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        fxCtx.restore();
+      }
+      fxParts = fxParts.filter(p => p.y < h + 30);
+    } else {
+      // 落敗：灰色雨絲；平手：往上飄的藍色光點
+      const lose = fxMode === 'lose';
+      if (elapsed < 8 && Math.random() < (lose ? 0.9 : 0.3)) {
+        fxParts.push(lose
+          ? { x: Math.random() * w * 1.2, y: -20, vy: 500 + Math.random() * 250, len: 12 + Math.random() * 14 }
+          : { x: Math.random() * w, y: h + 10, vy: -(40 + Math.random() * 60), len: 2 + Math.random() * 3 });
+      }
+      for (const p of fxParts) {
+        p.y += p.vy * dt;
+        if (lose) {
+          p.x -= p.vy * dt * 0.15;
+          fxCtx.strokeStyle = 'rgba(170, 182, 205, 0.5)';
+          fxCtx.lineWidth = 1.5;
+          fxCtx.beginPath(); fxCtx.moveTo(p.x, p.y); fxCtx.lineTo(p.x + p.len * 0.15, p.y - p.len); fxCtx.stroke();
+        } else {
+          fxCtx.fillStyle = 'rgba(140, 185, 255, 0.6)';
+          fxCtx.beginPath(); fxCtx.arc(p.x, p.y, p.len, 0, Math.PI * 2); fxCtx.fill();
+        }
+      }
+      fxParts = fxParts.filter(p => p.y < h + 30 && p.y > -30);
+    }
+    if (fxParts.length > 0 || elapsed < 8) fxRaf = requestAnimationFrame(step);
+    else stopResultFx();
+  };
+  fxRaf = requestAnimationFrame(step);
+}
+
+function stopResultFx() {
+  if (fxRaf) cancelAnimationFrame(fxRaf);
+  fxRaf = null;
+  fxParts = [];
+  fxMode = null;
+  fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
 }
 
 document.getElementById('startBtn').addEventListener('click', startGame);
 document.getElementById('againBtn').addEventListener('click', startGame);
 document.getElementById('menuBtn').addEventListener('click', () => {
-  newGame();
+  newGame();   // newGame 裡會關掉結算特效
   startScreenEl.hidden = false;
 });
 
@@ -1924,12 +2505,40 @@ function emit(x, y, n, opt) {
   }
 }
 
+// 塔倒塌時飛出去的石塊碎片（會旋轉、往上拋再落下，落地後停住慢慢消失）
+function emitChunk(x, y, color) {
+  if (!G) return;
+  const a = -Math.PI / 2 + randRange(-1.3, 1.3);
+  const sp = randRange(80, 190);
+  G.particles.push({
+    x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+    life: randRange(1.1, 1.6), max: 1.6,
+    size: randRange(3, 6.5), color, gravity: 420,
+    chunk: true, rot: Math.random() * 6, vr: randRange(-12, 12),
+    floor: y + randRange(14, 30),     // 落到這個高度就停住
+  });
+}
+
+// 飄起來的數字（同時最多 40 個，避免太亂、太耗效能）
+function pushNum(x, y, text, color, size = 12) {
+  if (!G) return;
+  let n = 0;
+  for (const e of G.effects) if (e.kind === 'num') n++;
+  if (n >= 40) return;
+  G.effects.push({ kind: 'num', x, y, text, color, size, t: 0.8, max: 0.8 });
+}
+
 function updateParticles(dt) {
   for (const p of G.particles) {
     p.life -= dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.vy += p.gravity * dt;
+    if (p.chunk) {
+      p.rot += p.vr * dt;
+      if (p.y >= p.floor && p.vy > 0) { p.y = p.floor; p.vy = 0; p.vx = 0; p.vr = 0; p.gravity = 0; }
+      continue;
+    }
     p.vx *= 0.94;
     p.vy *= p.gravity ? 1 : 0.94;
   }
@@ -1942,11 +2551,12 @@ function updateParticles(dt) {
 // 每一格畫面的更新
 // =====================================================
 function update(dt) {
-  if (!G.started || G.over) return;
+  if (!G.started) return;
 
-  // 特效倒數
+  // 特效倒數（遊戲結束後也繼續播，塔倒塌、勝負大字才播得完）
   for (const e of G.effects) e.t -= dt;
   G.effects = G.effects.filter(e => e.t > 0);
+  if (G.over) return;
 
   // 開場倒數：倒數時不回聖水、不計時
   if (G.countdown > 0) {
@@ -1990,34 +2600,60 @@ function update(dt) {
     return;
   }
 
+  expireCounters();
   updateAI(dt);
   for (const u of G.units) if (!u.dead) updateUnit(u, dt);
   for (const t of G.towers) updateTower(t, dt);
 
   // 移除死掉的單位（死掉時冒一團煙）
+  // 陣亡：白煙＋隊伍色光圈＋💀 往上飄＋「噗」一聲（炸彈兵自爆有自己的特效）
   for (const u of G.units) {
-    if (u.dead && !u.card.bomb) emit(u.x, u.y, 8, { color: '#e8e8e8', speed: 35, life: 0.5, size: 5, up: 15 });
+    // 成就「完美防守」：敵方衝鋒豬或炸彈兵還沒打到塔就被解決
+    if (u.dead && u.team === 'enemy' && (u.id === 'hog' || u.id === 'bomb') && !u.hitTower) award('perfect');
+    if (!u.dead || u.card.bomb) continue;
+    emit(u.x, u.y, 12, { color: '#ececec', speed: 45, life: 0.6, size: 5, up: 15 });
+    if (u.card.building) continue;   // 砲塔時間到消失只冒煙
+    emit(u.x, u.y, 6, { color: u.team === 'me' ? COLOR.meLight : COLOR.enemyLight, speed: 70, life: 0.4, size: 2.5 });
+    G.effects.push({ kind: 'ring', x: u.x, y: u.y + 4, r0: 4, r1: 22, color: u.team === 'me' ? COLOR.me : COLOR.enemy, width: 2.5, t: 0.35, max: 0.35 });
+    G.effects.push({ kind: 'icon', x: u.x, y: u.y - 10, text: '💀', t: 0.75, max: 0.75 });
+    sfx('die');
   }
   G.units = G.units.filter(u => !u.dead);
 }
 
 // 更新 HTML 介面（聖水、時間、皇冠、手牌）
 function updateUI() {
-  for (let i = 0; i < ELIXIR_MAX; i++) {
-    const fill = Math.max(0, Math.min(1, G.elixir - i));
-    elixirCells[i].firstChild.style.width = (fill * 100) + '%';
-    elixirCells[i].classList.toggle('part', fill > 0 && fill < 1);
+  // 聖水條：整數部分實心流動，正在充能的那一段半透明
+  const whole = Math.floor(G.elixir);
+  elixirFillEl.style.width = (whole / ELIXIR_MAX * 100) + '%';
+  elixirChargeEl.style.width = (G.elixir / ELIXIR_MAX * 100) + '%';
+  const full = G.elixir >= ELIXIR_MAX;
+  elixirBarEl.classList.toggle('full', full);
+  elixirGemEl.classList.toggle('full', full);
+  // 聖水剛滿：「叮咚」一聲＋提示（每次滿只一次）
+  if (full && !UI.wasFull && G.started && !G.over && G.countdown <= 0) {
+    sfx('full');
+    showMsg('💧 聖水滿了！', 1200, 'good');
   }
-  elixirBarEl.classList.toggle('full', G.elixir >= ELIXIR_MAX);
-  elixirNumEl.textContent = Math.floor(G.elixir);
+  UI.wasFull = full;
+  if (elixirNumEl.textContent !== String(whole)) {
+    elixirNumEl.textContent = whole;
+    if (G.started) replayClass(elixirNumEl.parentElement, 'tick');
+  }
   const s = Math.ceil(G.timeLeft);
   timerEl.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   timerEl.classList.toggle('hurry', s <= 60 && !G.over);
   timeLabelEl.textContent = s <= 60 ? '最後一分鐘' : '剩餘時間';
   const mk = killsBy('me');
   const ek = killsBy('enemy');
-  if (myCrownsEl.dataset.n !== String(mk)) { myCrownsEl.innerHTML = crownsHTML(mk); myCrownsEl.dataset.n = mk; }
-  if (enemyCrownsEl.dataset.n !== String(ek)) { enemyCrownsEl.innerHTML = crownsHTML(ek); enemyCrownsEl.dataset.n = ek; }
+  // 皇冠變多時，新亮的那一個彈一下
+  for (const [el, n] of [[myCrownsEl, mk], [enemyCrownsEl, ek]]) {
+    if (el.dataset.n === String(n)) continue;
+    const before = Number(el.dataset.n || 0);
+    el.innerHTML = crownsHTML(n);
+    if (n > before && el.dataset.n !== undefined) el.children[n - 1].classList.add('pop');
+    el.dataset.n = n;
+  }
   aiElixirEl.textContent = Math.floor(G.ai.elixir);
   updateHandState();
 }
@@ -2056,101 +2692,173 @@ function buildBackground() {
   const c = bgCanvas.getContext('2d');
   c.scale(BG_SCALE, BG_SCALE);
   const rnd = seeded(20261016);
+  const bankTop = RIVER_Y - RIVER_HALF - 6;      // 河岸沙地的範圍（只是畫面）
+  const bankBot = RIVER_Y + RIVER_HALF + 6;
 
-  // 草地底色＋割草條紋
-  c.fillStyle = '#5aa843';
-  c.fillRect(0, 0, W, H);
-  for (let y = 0; y < H; y += 40) {
-    c.fillStyle = 'rgba(255,255,255,0.045)';
-    c.fillRect(0, y, W, 20);
+  // --- 草地：深淺兩色的方格（1 格 = 20 px，看得出距離），再加大片的明暗斑塊 ---
+  for (let gy = 0; gy < H; gy += 20) {
+    for (let gx = 0; gx < W; gx += 20) {
+      c.fillStyle = ((gx + gy) / 20) % 2 ? '#5aab44' : '#63b54b';
+      c.fillRect(gx, gy, 20, 20);
+    }
+  }
+  for (let i = 0; i < 70; i++) {
+    const x = rnd() * W, y = rnd() * H, r = 20 + rnd() * 50;
+    const g = c.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, rnd() < 0.5 ? 'rgba(20,70,15,0.10)' : 'rgba(200,255,150,0.07)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = g;
+    c.fillRect(x - r, y - r, r * 2, r * 2);
   }
   // 草葉紋理（很多小短線）
-  for (let i = 0; i < 9000; i++) {
+  for (let i = 0; i < 10000; i++) {
     const x = rnd() * W, y = rnd() * H;
-    c.strokeStyle = rnd() < 0.5 ? 'rgba(30,80,20,0.18)' : 'rgba(170,230,120,0.14)';
+    c.strokeStyle = rnd() < 0.5 ? 'rgba(25,75,18,0.2)' : 'rgba(180,240,130,0.16)';
     c.lineWidth = 0.6;
     c.beginPath();
     c.moveTo(x, y);
-    c.lineTo(x + (rnd() - 0.5) * 1.5, y - 1.5 - rnd() * 2);
+    c.lineTo(x + (rnd() - 0.5) * 1.5, y - 1.5 - rnd() * 2.2);
     c.stroke();
   }
+  // 雙方半場淡淡的隊伍色（敵方上方偏紅、我方下方偏藍），幫助分辨
+  let tg = c.createLinearGradient(0, 0, 0, RIVER_Y);
+  tg.addColorStop(0, 'rgba(255,70,70,0.09)');
+  tg.addColorStop(1, 'rgba(255,70,70,0)');
+  c.fillStyle = tg;
+  c.fillRect(0, 0, W, RIVER_Y);
+  tg = c.createLinearGradient(0, RIVER_Y, 0, H);
+  tg.addColorStop(0, 'rgba(70,140,255,0)');
+  tg.addColorStop(1, 'rgba(70,140,255,0.10)');
+  c.fillStyle = tg;
+  c.fillRect(0, RIVER_Y, W, H - RIVER_Y);
 
-  // 土路（兩條直路＋國王塔前的橫路）
-  const pathColor = '#cda56a';
-  const pathEdge = '#9e7a45';
-  function pathRect(x, y, w, h, r) {
-    rr(c, x - 1.5, y - 1.5, w + 3, h + 3, r + 1.5);
+  // --- 土路（兩條直路＋國王塔前的橫路）：深色邊、土色路面、中間較亮 ---
+  const pathEdge = '#8a6738';
+  function pathShape(x, y, w, h, r) { rr(c, x, y, w, h, r); }
+  const paths = [];
+  for (const lx of LANES) paths.push([lx - 15, ENEMY_KING_Y - 10, 30, MY_KING_Y - ENEMY_KING_Y + 20, 12]);
+  paths.push([LANES[0], ENEMY_KING_Y - 10, LANES[1] - LANES[0], 20, 8]);
+  paths.push([LANES[0], MY_KING_Y - 10, LANES[1] - LANES[0], 20, 8]);
+  // 路邊的陰影和深色邊
+  for (const [x, y, w, h, r] of paths) {
+    pathShape(x - 2, y - 1, w + 4, h + 4, r + 2);
+    c.fillStyle = 'rgba(0,0,0,0.18)';
+    c.fill();
+    pathShape(x - 1.5, y - 1.5, w + 3, h + 3, r + 1.5);
     c.fillStyle = pathEdge;
     c.fill();
-    rr(c, x, y, w, h, r);
-    c.fillStyle = pathColor;
+  }
+  for (const [x, y, w, h, r] of paths) {
+    pathShape(x, y, w, h, r);
+    c.fillStyle = '#c99f62';
     c.fill();
   }
-  for (const lx of LANES) pathRect(lx - 15, ENEMY_KING_Y - 10, 30, MY_KING_Y - ENEMY_KING_Y + 20, 12);
-  pathRect(LANES[0], ENEMY_KING_Y - 10, LANES[1] - LANES[0], 20, 8);
-  pathRect(LANES[0], MY_KING_Y - 10, LANES[1] - LANES[0], 20, 8);
+  // 路面中間比較亮（被踩平的地方）
   for (const lx of LANES) {
-    rr(c, lx - 15, ENEMY_KING_Y - 10, 30, MY_KING_Y - ENEMY_KING_Y + 20, 12);
-    c.fillStyle = pathColor;
+    rr(c, lx - 8, ENEMY_KING_Y, 16, MY_KING_Y - ENEMY_KING_Y, 8);
+    c.fillStyle = 'rgba(255,235,190,0.16)';
     c.fill();
   }
-  // 土路上的小石子和車痕
-  for (let i = 0; i < 700; i++) {
+  // 小石子、車痕
+  for (let i = 0; i < 900; i++) {
     const lx = LANES[i % 2];
     const x = lx + (rnd() - 0.5) * 26;
     const y = ENEMY_KING_Y + rnd() * (MY_KING_Y - ENEMY_KING_Y);
-    c.fillStyle = rnd() < 0.5 ? 'rgba(120,85,40,0.35)' : 'rgba(255,240,200,0.35)';
+    c.fillStyle = rnd() < 0.5 ? 'rgba(115,80,38,0.38)' : 'rgba(255,240,205,0.38)';
     c.beginPath();
     c.ellipse(x, y, 0.6 + rnd() * 1.2, 0.5 + rnd(), 0, 0, Math.PI * 2);
     c.fill();
   }
-
-  // 塔的石頭地基
-  for (const t of makeTowers()) {
-    const s = (t.type === 'king' ? 50 : 42) + 18;
-    rr(c, t.x - s / 2, t.y - s / 2 + 3, s, s, 9);
-    c.fillStyle = 'rgba(0,0,0,0.25)';
-    c.fill();
-    rr(c, t.x - s / 2, t.y - s / 2, s, s, 9);
-    const g = c.createLinearGradient(0, t.y - s / 2, 0, t.y + s / 2);
-    g.addColorStop(0, '#c9c2b2');
-    g.addColorStop(1, '#a39b8a');
-    c.fillStyle = g;
-    c.fill();
-    // 石板縫
-    c.strokeStyle = 'rgba(0,0,0,0.12)';
-    c.lineWidth = 0.8;
-    for (let k = 1; k < 4; k++) {
-      c.beginPath(); c.moveTo(t.x - s / 2 + 3, t.y - s / 2 + k * s / 4); c.lineTo(t.x + s / 2 - 3, t.y - s / 2 + k * s / 4); c.stroke();
+  c.strokeStyle = 'rgba(110,75,35,0.22)';
+  c.lineWidth = 1;
+  for (const lx of LANES) {
+    for (const off of [-6, 6]) {
+      c.beginPath(); c.moveTo(lx + off, ENEMY_KING_Y); c.lineTo(lx + off, MY_KING_Y); c.stroke();
+    }
+  }
+  // 路邊的石頭鑲邊
+  for (const lx of LANES) {
+    for (let y = ENEMY_KING_Y + 6; y < MY_KING_Y - 4; y += 7) {
+      if (y > bankTop - 4 && y < bankBot + 4) continue;   // 河邊不畫
+      for (const ex of [lx - 16, lx + 16]) {
+        const r = 1.6 + rnd() * 1.1;
+        c.fillStyle = 'rgba(0,0,0,0.2)';
+        c.beginPath(); c.ellipse(ex + 0.5, y + 1, r, r * 0.7, 0, 0, Math.PI * 2); c.fill();
+        c.fillStyle = rnd() < 0.5 ? '#bdb6a6' : '#a59e8f';
+        c.beginPath(); c.ellipse(ex, y, r, r * 0.75, 0, 0, Math.PI * 2); c.fill();
+      }
     }
   }
 
-  // 河岸（沙地）
-  const bank = c.createLinearGradient(0, RIVER_Y - RIVER_HALF - 6, 0, RIVER_Y + RIVER_HALF + 6);
-  bank.addColorStop(0, '#c9b37a');
-  bank.addColorStop(1, '#b49a5e');
-  c.fillStyle = bank;
-  c.fillRect(0, RIVER_Y - RIVER_HALF - 5, W, RIVER_HALF * 2 + 10);
+  // --- 塔的石頭地基（有斜面的石板） ---
+  for (const t of makeTowers()) {
+    const s = (t.type === 'king' ? 50 : 42) + 18;
+    rr(c, t.x - s / 2 - 1, t.y - s / 2 + 4, s + 2, s, 10);
+    c.fillStyle = 'rgba(0,0,0,0.28)';
+    c.fill();
+    rr(c, t.x - s / 2, t.y - s / 2, s, s, 9);
+    const g = c.createLinearGradient(0, t.y - s / 2, 0, t.y + s / 2);
+    g.addColorStop(0, '#d4cdbd');
+    g.addColorStop(1, '#9e9686');
+    c.fillStyle = g;
+    c.fill();
+    // 石板格線
+    c.strokeStyle = 'rgba(60,50,35,0.16)';
+    c.lineWidth = 0.8;
+    for (let k = 1; k < 4; k++) {
+      const ly = t.y - s / 2 + k * s / 4;
+      c.beginPath(); c.moveTo(t.x - s / 2 + 3, ly); c.lineTo(t.x + s / 2 - 3, ly); c.stroke();
+      const lx = t.x - s / 2 + k * s / 4 + (k % 2 ? 4 : -4);
+      c.beginPath(); c.moveTo(lx, t.y - s / 2 + 3); c.lineTo(lx, t.y + s / 2 - 3); c.stroke();
+    }
+    // 上緣亮邊
+    rr(c, t.x - s / 2 + 1, t.y - s / 2 + 1, s - 2, s - 2, 8);
+    c.strokeStyle = 'rgba(255,255,255,0.35)';
+    c.lineWidth = 1;
+    c.stroke();
+  }
 
-  // 裝飾：樹叢、石頭、小花（只放在兩側邊緣和角落，不擋路）
+  // --- 河岸（沙地＋小石子＋垂下來的草） ---
+  const bank = c.createLinearGradient(0, bankTop, 0, bankBot);
+  bank.addColorStop(0, '#d2bc82');
+  bank.addColorStop(0.5, '#b89c5f');
+  bank.addColorStop(1, '#cdb57a');
+  c.fillStyle = bank;
+  c.fillRect(0, bankTop, W, bankBot - bankTop);
+  for (let i = 0; i < 160; i++) {
+    const x = rnd() * W;
+    const y = rnd() < 0.5 ? bankTop + 1 + rnd() * 4 : bankBot - 1 - rnd() * 4;
+    c.fillStyle = rnd() < 0.5 ? 'rgba(120,100,70,0.5)' : 'rgba(240,228,190,0.6)';
+    c.beginPath(); c.ellipse(x, y, 0.8 + rnd() * 1.3, 0.6 + rnd() * 0.8, 0, 0, Math.PI * 2); c.fill();
+  }
+  // 草地垂到沙地上的鋸齒邊
+  for (let x = 0; x < W; x += 4) {
+    c.fillStyle = '#4f9a3b';
+    const h1 = 1.5 + rnd() * 2.5;
+    const h2 = 1.5 + rnd() * 2.5;
+    c.beginPath(); c.moveTo(x, bankTop); c.lineTo(x + 2, bankTop + h1); c.lineTo(x + 4, bankTop); c.fill();
+    c.beginPath(); c.moveTo(x, bankBot); c.lineTo(x + 2, bankBot - h2); c.lineTo(x + 4, bankBot); c.fill();
+  }
+
+  // --- 裝飾：樹叢、石頭、草叢、小花（只放在兩側邊緣和角落，不擋路） ---
   function bush(x, y, r) {
-    c.fillStyle = 'rgba(0,0,0,0.22)';
+    c.fillStyle = 'rgba(0,0,0,0.24)';
     c.beginPath(); c.ellipse(x + 2, y + r * 0.7, r * 1.2, r * 0.45, 0, 0, Math.PI * 2); c.fill();
     const blobs = [[0, 0, 1], [-0.6, 0.15, 0.7], [0.6, 0.15, 0.7], [0, -0.45, 0.65]];
     for (const [dx, dy, s] of blobs) {
       const g = c.createRadialGradient(x + dx * r - r * 0.2, y + dy * r - r * 0.3, 1, x + dx * r, y + dy * r, r * s);
-      g.addColorStop(0, '#7fd05a');
-      g.addColorStop(1, '#2f7a28');
+      g.addColorStop(0, '#86d860');
+      g.addColorStop(1, '#2c7426');
       c.fillStyle = g;
       c.beginPath(); c.arc(x + dx * r, y + dy * r, r * s, 0, Math.PI * 2); c.fill();
     }
   }
   function rock(x, y, r) {
-    c.fillStyle = 'rgba(0,0,0,0.22)';
+    c.fillStyle = 'rgba(0,0,0,0.24)';
     c.beginPath(); c.ellipse(x + 1.5, y + r * 0.6, r, r * 0.4, 0, 0, Math.PI * 2); c.fill();
     const g = c.createLinearGradient(x, y - r, x, y + r);
-    g.addColorStop(0, '#c3c0b8');
-    g.addColorStop(1, '#7c7870');
+    g.addColorStop(0, '#cdcac2');
+    g.addColorStop(1, '#7a766e');
     c.fillStyle = g;
     c.beginPath();
     c.moveTo(x - r, y + r * 0.4);
@@ -2161,6 +2869,13 @@ function buildBackground() {
     c.closePath();
     c.fill();
   }
+  function tuft(x, y) {
+    c.strokeStyle = '#3f8a2e';
+    c.lineWidth = 1;
+    for (let k = -2; k <= 2; k++) {
+      c.beginPath(); c.moveTo(x + k, y); c.quadraticCurveTo(x + k * 1.6, y - 3, x + k * 2.2, y - 5 - rnd() * 2); c.stroke();
+    }
+  }
   const decor = [
     ['bush', 14, 40, 9], ['bush', 346, 60, 10], ['rock', 22, 250, 5], ['bush', 340, 230, 8],
     ['bush', 16, 420, 9], ['rock', 344, 440, 6], ['bush', 344, 640, 10], ['bush', 18, 630, 8],
@@ -2168,11 +2883,17 @@ function buildBackground() {
     ['rock', 236, 24, 4], ['rock', 128, 664, 4],
   ];
   for (const [kind, x, y, r] of decor) (kind === 'bush' ? bush : rock)(x, y, r);
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < 40; i++) {
+    const x = rnd() < 0.5 ? 4 + rnd() * 34 : W - 4 - rnd() * 34;
+    const y = rnd() * H;
+    if (y > bankTop - 8 && y < bankBot + 8) continue;
+    tuft(x, y);
+  }
+  for (let i = 0; i < 80; i++) {
     const side = rnd() < 0.5 ? rnd() * 34 : W - rnd() * 34;
     const y = rnd() * H;
     if (Math.abs(y - RIVER_Y) < 22) continue;
-    c.fillStyle = ['#fff6a0', '#ffffff', '#ffb3d1'][Math.floor(rnd() * 3)];
+    c.fillStyle = ['#fff6a0', '#ffffff', '#ffb3d1', '#c8b6ff'][Math.floor(rnd() * 4)];
     c.beginPath(); c.arc(side, y, 1 + rnd() * 0.8, 0, Math.PI * 2); c.fill();
   }
 
@@ -2182,7 +2903,7 @@ function buildBackground() {
   const v = vignetteCanvas.getContext('2d');
   const vg = v.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.72);
   vg.addColorStop(0, 'rgba(0,0,0,0)');
-  vg.addColorStop(1, 'rgba(0,0,0,0.38)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.36)');
   v.fillStyle = vg;
   v.fillRect(0, 0, W, H);
 }
@@ -2233,53 +2954,99 @@ function emoji(ch, x, y, size) {
 // 河水和橋（每格都畫，河水會流動）
 function drawWater() {
   const top = RIVER_Y - RIVER_HALF;
-  const g = ctx.createLinearGradient(0, top, 0, top + RIVER_HALF * 2);
-  g.addColorStop(0, '#3fb0f0');
-  g.addColorStop(0.5, '#2a90dc');
-  g.addColorStop(1, '#1f78c4');
+  const bot = RIVER_Y + RIVER_HALF;
+  const t = performance.now() / 1000;
+  // 河水：兩岸淺、中間深
+  const g = ctx.createLinearGradient(0, top, 0, bot);
+  g.addColorStop(0, '#5cc6f5');
+  g.addColorStop(0.35, '#2d93dc');
+  g.addColorStop(0.65, '#1f78c8');
+  g.addColorStop(1, '#3aa6ea');
   ctx.fillStyle = g;
   ctx.fillRect(0, top, W, RIVER_HALF * 2);
-  // 流動的亮紋
-  const t = performance.now() / 1000;
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-  ctx.lineWidth = 1.2;
-  for (let i = 0; i < 9; i++) {
-    const x = ((i * 47 + t * 18) % (W + 40)) - 20;
-    const y = top + 5 + (i % 3) * 6;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.quadraticCurveTo(x + 6, y - 2, x + 12, y);
-    ctx.stroke();
+  // 岸邊下緣的陰影（看起來河比地面低）
+  ctx.fillStyle = 'rgba(0,30,70,0.28)';
+  ctx.fillRect(0, top, W, 2.5);
+  // 流動的波紋（兩層速度不同）
+  ctx.lineWidth = 1.1;
+  for (let layer = 0; layer < 2; layer++) {
+    ctx.strokeStyle = layer ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.4)';
+    const speed = layer ? 11 : 20;
+    for (let i = 0; i < 10; i++) {
+      const x = ((i * 41 + layer * 19 + t * speed) % (W + 40)) - 20;
+      const y = top + 5 + ((i + layer) % 3) * 6;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.quadraticCurveTo(x + 5, y - 2, x + 10, y);
+      ctx.quadraticCurveTo(x + 15, y + 2, x + 20, y);
+      ctx.stroke();
+    }
+  }
+  // 水面閃光
+  for (let i = 0; i < 6; i++) {
+    const x = (i * 67 + 13) % W;
+    const a = Math.max(0, Math.sin(t * 2.2 + i * 1.7));
+    ctx.fillStyle = `rgba(255,255,255,${a * 0.7})`;
+    ctx.fillRect(x, top + 6 + (i % 3) * 5, 2, 1.2);
   }
   // 岸邊的白色浪花
-  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
   for (let x = 0; x < W; x += 6) {
     const w = 1 + Math.sin(x * 0.7 + t * 3) * 0.8;
-    ctx.fillRect(x, top, 4, w);
-    ctx.fillRect(x + 3, top + RIVER_HALF * 2 - w, 4, w);
+    ctx.fillRect(x, top + 2, 4, w);
+    ctx.fillRect(x + 3, bot - w, 4, w);
   }
-  // 橋
+  // 橋：兩端石頭橋墩＋木板橋面＋繩子欄杆
   for (const lx of LANES) {
     const bx = lx - BRIDGE_HALF - 2;
     const by = top - 8;
     const bw = BRIDGE_HALF * 2 + 4;
     const bh = RIVER_HALF * 2 + 16;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(bx + 2, by + 3, bw, bh);
-    ctx.fillStyle = '#9c6435';
+    // 橋在水上的影子
+    ctx.fillStyle = 'rgba(0,20,50,0.35)';
+    ctx.fillRect(bx + 3, top, bw, RIVER_HALF * 2);
+    // 木板
+    ctx.fillStyle = '#7d4d27';
     ctx.fillRect(bx, by, bw, bh);
-    for (let py = by; py < by + bh; py += 5) {
-      ctx.fillStyle = (py / 5) % 2 ? '#a96f3d' : '#8f5a2f';
+    for (let py = by + 1; py < by + bh - 1; py += 5) {
+      ctx.fillStyle = (Math.round(py / 5) % 2) ? '#b07a45' : '#9a6535';
       ctx.fillRect(bx + 3, py, bw - 6, 4);
+      ctx.fillStyle = 'rgba(255,230,190,0.18)';
+      ctx.fillRect(bx + 3, py, bw - 6, 1);
+      // 釘子
+      ctx.fillStyle = 'rgba(40,25,10,0.6)';
+      ctx.fillRect(bx + 5, py + 1.5, 1, 1);
+      ctx.fillRect(bx + bw - 6, py + 1.5, 1, 1);
     }
-    // 欄杆
-    ctx.fillStyle = '#5a3418';
-    ctx.fillRect(bx, by - 1, 3, bh + 2);
-    ctx.fillRect(bx + bw - 3, by - 1, 3, bh + 2);
-    ctx.fillStyle = '#7a4a24';
-    for (let py = by; py <= by + bh; py += 10) {
-      ctx.fillRect(bx - 1, py, 5, 3);
-      ctx.fillRect(bx + bw - 4, py, 5, 3);
+    // 兩端的石頭橋墩
+    for (const sy of [by - 3, by + bh - 4]) {
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(bx - 2, sy + 2, bw + 4, 7);
+      const sg = ctx.createLinearGradient(0, sy, 0, sy + 7);
+      sg.addColorStop(0, '#d8d1c2');
+      sg.addColorStop(1, '#948c7c');
+      ctx.fillStyle = sg;
+      rr(ctx, bx - 3, sy, bw + 6, 7, 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(60,50,35,0.3)';
+      ctx.lineWidth = 0.7;
+      for (let sx = bx + 4; sx < bx + bw; sx += 8) {
+        ctx.beginPath(); ctx.moveTo(sx, sy + 1); ctx.lineTo(sx, sy + 6); ctx.stroke();
+      }
+    }
+    // 欄杆柱子＋繩子
+    ctx.fillStyle = '#4e2c12';
+    for (const px of [bx - 1, bx + bw - 3]) {
+      for (const py of [by + 2, by + bh / 2 - 2, by + bh - 7]) ctx.fillRect(px, py, 4, 5);
+    }
+    ctx.strokeStyle = '#e1c48d';
+    ctx.lineWidth = 1.2;
+    for (const px of [bx + 1, bx + bw - 1]) {
+      ctx.beginPath();
+      ctx.moveTo(px, by + 4);
+      ctx.quadraticCurveTo(px, by + bh / 4 + 2, px, by + bh / 2);
+      ctx.quadraticCurveTo(px, by + bh * 0.75 + 2, px, by + bh - 5);
+      ctx.stroke();
     }
   }
 }
@@ -2359,24 +3126,61 @@ function drawHpBar(x, y, w, h, ratio, color, label) {
 }
 
 function drawTower(t) {
-  const isMe = t.team === 'me';
   const king = t.type === 'king';
   const s = king ? 50 : 42;
-  const h = s / 2;
   const now = performance.now();
   if (!t.alive) {
+    // 剛倒下的 0.45 秒：塔身往下塌陷、變扁、淡出，碎石慢慢出現
+    const k = t.fellAt ? Math.min(1, (now - t.fellAt) / 450) : 1;
+    if (k < 1) {
+      const baseY = t.y + s / 2;
+      ctx.save();
+      ctx.globalAlpha = 1 - k;
+      ctx.translate(t.x, baseY);
+      ctx.scale(1 + k * 0.25, 1 - k * 0.85);
+      ctx.translate(-t.x, -baseY);
+      drawTowerBody(t, now, false);
+      ctx.restore();
+    }
     // 已摧毀：一堆碎石，偶爾冒煙
-    const stones = [[-11, 6, 9], [9, 8, 8], [0, -4, 10], [-7, -11, 6], [13, -6, 6], [4, 12, 5]];
+    ctx.save();
+    ctx.globalAlpha = k;
+    const stones = [[-11, 6, 9], [9, 8, 8], [0, -4, 10], [-7, -11, 6], [13, -6, 6], [4, 12, 5], [-15, -2, 4], [16, 5, 4]];
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath(); ctx.ellipse(t.x + 3, t.y + 10, s / 2 + 2, 9, 0, 0, Math.PI * 2); ctx.fill();
     for (const [dx, dy, r] of stones) {
       const g = ctx.createLinearGradient(0, t.y + dy - r, 0, t.y + dy + r);
-      g.addColorStop(0, '#9b958a');
+      g.addColorStop(0, '#a8a195');
       g.addColorStop(1, '#5d5850');
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(t.x + dx, t.y + dy, r, 0, Math.PI * 2); ctx.fill();
     }
+    // 倒下的隊伍色旗子
+    ctx.fillStyle = t.team === 'me' ? COLOR.meDark : COLOR.enemyDark;
+    ctx.fillRect(t.x + 6, t.y - 2, 10, 4);
+    ctx.restore();
     if (G.started && Math.random() < 0.04) emit(t.x + randRange(-8, 8), t.y - 4, 1, { color: '#6e6a64', speed: 6, life: 1.4, size: 6, up: 14 });
     return;
   }
+  // 被打到時塔本身抖一下
+  let jx = 0, jy = 0;
+  if (t.shakeUntil && now < t.shakeUntil) {
+    const f = (t.shakeUntil - now) / 160;
+    jx = randRange(-2, 2) * f;
+    jy = randRange(-1, 1) * f;
+  }
+  ctx.save();
+  ctx.translate(jx, jy);
+  drawTowerBody(t, now, true);
+  ctx.restore();
+}
+
+// 畫一座完整的塔（showBar：要不要畫血條）
+function drawTowerBody(t, now, showBar) {
+  const isMe = t.team === 'me';
+  const king = t.type === 'king';
+  const s = king ? 50 : 42;
+  const h = s / 2;
   const main = isMe ? COLOR.me : COLOR.enemy;
   const dark = isMe ? COLOR.meDark : COLOR.enemyDark;
   const frontH = 12;        // 正面（立體感）的高度
@@ -2387,15 +3191,15 @@ function drawTower(t) {
   ctx.beginPath(); ctx.ellipse(t.x + 5, t.y + h + 2, h + 4, 7, 0, 0, Math.PI * 2); ctx.fill();
   // 正面（較暗的石牆）
   const fg = ctx.createLinearGradient(0, t.y + h - frontH, 0, t.y + h + 2);
-  fg.addColorStop(0, '#9c958a');
-  fg.addColorStop(1, '#6f695f');
+  fg.addColorStop(0, '#a09989');
+  fg.addColorStop(1, '#6b655b');
   ctx.fillStyle = fg;
   rr(ctx, t.x - h, t.y + h - frontH, s, frontH + 2, 4);
   ctx.fill();
   // 頂面（較亮的石板）
   const tg = ctx.createLinearGradient(0, top, 0, t.y + h - frontH);
-  tg.addColorStop(0, '#efe9dc');
-  tg.addColorStop(1, '#cfc7b7');
+  tg.addColorStop(0, '#f3eee2');
+  tg.addColorStop(1, '#d0c8b8');
   ctx.fillStyle = tg;
   rr(ctx, t.x - h, top, s, s - frontH + 4, 5);
   ctx.fill();
@@ -2406,9 +3210,25 @@ function drawTower(t) {
     ctx.beginPath(); ctx.moveTo(t.x - h + 3, ly); ctx.lineTo(t.x + h - 3, ly); ctx.stroke();
   }
   // 正面的石磚
-  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)';
   for (let lx = t.x - h + 8; lx < t.x + h; lx += 9) {
     ctx.beginPath(); ctx.moveTo(lx, t.y + h - frontH + 1); ctx.lineTo(lx, t.y + h + 1); ctx.stroke();
+  }
+  // 血量變少時出現裂痕（60% 以下一條、30% 以下更多）
+  const ratio = t.hp / t.maxHp;
+  if (ratio < 0.6) {
+    ctx.strokeStyle = 'rgba(50,40,30,0.65)';
+    ctx.lineWidth = 1.1;
+    const cracks = [[[-h + 4, top + 12], [-h + 10, top + 18], [-h + 7, top + 25], [-h + 13, t.y + h - 2]]];
+    if (ratio < 0.3) {
+      cracks.push([[h - 5, top + 10], [h - 11, top + 17], [h - 8, top + 23]]);
+      cracks.push([[2, t.y + h - frontH], [5, t.y + h - 6], [1, t.y + h + 1]]);
+    }
+    for (const line of cracks) {
+      ctx.beginPath();
+      line.forEach(([dx, y], i) => (i ? ctx.lineTo(t.x + dx, y) : ctx.moveTo(t.x + dx, y)));
+      ctx.stroke();
+    }
   }
   // 城垛（隊伍顏色）
   ctx.fillStyle = dark;
@@ -2446,15 +3266,16 @@ function drawTower(t) {
   emoji(king ? '🤴' : '👸', t.x, t.y + 1, king ? 23 : 19);
   // 被打到時閃白光
   if (now < t.flashUntil) {
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    rr(ctx, t.x - h, top, s, s + 4, 5);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    rr(ctx, t.x - h - 2, top - 8, s + 4, s + 12, 5);
     ctx.fill();
   }
+  if (!showBar) return;
   // 血條（塔上方，中間寫數字）
   const barW = s + 12;
   const barY = top - (king ? 28 : 20);
   if (king) emoji('👑', t.x, barY - 9, 13);
-  drawHpBar(t.x, barY, barW, 9, t.hp / t.maxHp, isMe ? COLOR.meBar : COLOR.enemyBar, Math.ceil(t.hp));
+  drawHpBar(t.x, barY, barW, 9, ratio, isMe ? COLOR.meBar : COLOR.enemyBar, Math.ceil(t.hp));
 }
 
 // 畫砲塔：石頭底座＋會轉向目標的砲管
@@ -2486,17 +3307,45 @@ function drawCannon(u) {
   ctx.fill();
   ctx.fillStyle = '#111';
   ctx.beginPath(); ctx.arc(16 - recoil, 0, 4, 0, Math.PI * 2); ctx.fill();
+  // 開砲的火光
+  if (recoil) {
+    ctx.fillStyle = 'rgba(255,200,90,0.9)';
+    ctx.beginPath(); ctx.arc(20, 0, 4.5, 0, Math.PI * 2); ctx.fill();
+  }
   ctx.restore();
   ctx.fillStyle = '#3a3a3a';
   ctx.beginPath(); ctx.arc(u.x, y, 7, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
   ctx.beginPath(); ctx.arc(u.x - 2, y - 2, 3, 0, Math.PI * 2); ctx.fill();
   if (performance.now() < u.flashUntil) {
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.beginPath(); ctx.arc(u.x, y, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    rr(ctx, u.x - 15, y - 7, 30, 20, 5);
+    ctx.fill();
   }
   // 血條一直顯示（會隨時間減少）
   drawHpBar(u.x, y - 20, 26, 4, u.hp / u.maxHp, isMe ? COLOR.meBar : COLOR.enemyBar);
+}
+
+// 受擊閃白用：把 emoji 做成一張純白剪影（第一次用到時畫好存起來）
+const whiteCache = {};
+function whiteEmoji(ch, size) {
+  const key = ch + size;
+  if (whiteCache[key]) return whiteCache[key];
+  const S = 3;                       // 3 倍解析度，縮小後才清楚
+  const box = Math.ceil(size * 1.5);
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = box * S;
+  const c = cv.getContext('2d');
+  c.scale(S, S);
+  c.font = `${size}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText(ch, box / 2, box / 2);
+  c.globalCompositeOperation = 'source-in';
+  c.fillStyle = '#fff';
+  c.fillRect(0, 0, box, box);
+  whiteCache[key] = { cv, box };
+  return whiteCache[key];
 }
 
 function drawUnit(u) {
@@ -2518,6 +3367,10 @@ function drawUnit(u) {
   const bob = moving ? Math.abs(Math.sin(now / 110 + u.x)) * 2.5 : 0;
   const lift = u.card.air ? 14 + Math.sin(now / 160 + u.x) * 2 : 0;
   const y = u.y - drop - bob - lift;
+  const hurt = now < u.flashUntil;
+  // 受擊時壓扁一下（落地那一刻也壓扁一下）
+  const landing = age >= 220 && age < 320 ? 1 - (age - 220) / 100 : 0;
+  const squash = hurt ? 0.18 * (u.flashUntil - now) / 120 : landing * 0.2;
 
   // 影子（越高越小越淡）
   const shadowScale = 1 - Math.min(0.5, (drop + lift) / 60);
@@ -2538,20 +3391,24 @@ function drawUnit(u) {
     ctx.beginPath(); ctx.arc(u.x, y - 2, 14, 0, Math.PI * 2); ctx.stroke();
   }
 
-  // 本體：emoji（加一點陰影，翻轉面向）
+  // 本體：emoji（加一點陰影，翻轉面向；受擊時壓扁）
+  const size = u.card.count === 3 ? 16 : 20;
   ctx.save();
-  ctx.translate(u.x, y - 3);
-  ctx.scale(u.face || 1, 1);
+  ctx.translate(u.x, y + 4);
+  ctx.scale((u.face || 1) * (1 + squash), 1 - squash);
+  ctx.translate(0, -7);
   ctx.shadowColor = isMe ? 'rgba(40,110,255,0.9)' : 'rgba(255,50,50,0.9)';
   ctx.shadowBlur = 4;
-  emoji(u.card.emoji, 0, 0, u.card.count === 3 ? 16 : 20);
-  ctx.restore();
-
-  // 被打到時閃白光
-  if (now < u.flashUntil) {
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.beginPath(); ctx.arc(u.x, y - 3, 10, 0, Math.PI * 2); ctx.fill();
+  emoji(u.card.emoji, 0, 0, size);
+  // 受擊閃白：疊一張純白剪影
+  if (hurt) {
+    ctx.shadowBlur = 0;
+    const wc = whiteEmoji(u.card.emoji, size);
+    ctx.globalAlpha = 0.85 * (u.flashUntil - now) / 120;
+    ctx.drawImage(wc.cv, -wc.box / 2, -wc.box / 2, wc.box, wc.box);
+    ctx.globalAlpha = 1;
   }
+  ctx.restore();
 
   // 血條（受傷了才顯示）
   if (u.hp < u.maxHp) drawHpBar(u.x, y - 19, 22, 3.5, u.hp / u.maxHp, isMe ? COLOR.meBar : COLOR.enemyBar);
@@ -2629,10 +3486,48 @@ function drawEffects() {
       ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.ellipse(e.x, e.y + 6, 8 + p * 26, (8 + p * 26) * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
-    } else if (e.kind === 'num') {
-      // 飄起來的數字
+    } else if (e.kind === 'ring') {
+      // 衝擊波（下牌落地、單位陣亡、塔倒塌）：扁圓環往外擴散
+      const r = e.r0 + (e.r1 - e.r0) * (1 - a * a);
+      ctx.strokeStyle = e.color;
+      ctx.globalAlpha = a;
+      ctx.lineWidth = e.width * (0.4 + a * 0.6);
+      ctx.beginPath(); ctx.ellipse(e.x, e.y, r, r * 0.5, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else if (e.kind === 'pillar') {
+      // 下牌時的一道隊伍色光柱
+      const g = ctx.createLinearGradient(0, e.y - 50, 0, e.y + 6);
+      g.addColorStop(0, 'rgba(255,255,255,0)');
+      g.addColorStop(1, e.color);
+      ctx.globalAlpha = a * 0.55;
+      ctx.fillStyle = g;
+      const w = 14 * (0.5 + a * 0.5);
+      ctx.fillRect(e.x - w / 2, e.y - 50, w, 56);
+      ctx.globalAlpha = 1;
+    } else if (e.kind === 'deny') {
+      // 點到不能下的地方：紅色 ✕ 彈一下
+      ctx.globalAlpha = a;
+      outlinedText('✕', e.x, e.y - p * 6, 20 + (1 - a) * 6, '#ff5a5f');
+      ctx.globalAlpha = 1;
+    } else if (e.kind === 'counter') {
+      // 剋制成功：金色大字彈出，下方小字寫誰剋誰
+      const pop = Math.min(1, p * 6);
+      const size = 20 * (0.6 + pop * 0.4) * (p < 0.17 ? 1.15 : 1);
+      ctx.globalAlpha = Math.min(1, a * 2.5);
+      const y = e.y - p * 14;
+      outlinedText(e.text, e.x, y, size, '#ffd45a', '#5a3300');
+      outlinedText(e.sub, e.x, y - 18, 11, '#ffffff');
+      ctx.globalAlpha = 1;
+    } else if (e.kind === 'icon') {
+      // 往上飄的圖示（陣亡的 💀）
       ctx.globalAlpha = Math.min(1, a * 2);
-      outlinedText(e.text, e.x, e.y - p * 22, 12 + (1 - Math.min(1, p * 4)) * 4, e.color);
+      emoji(e.text, e.x, e.y - p * 18, 13 + Math.min(1, p * 5) * 3);
+      ctx.globalAlpha = 1;
+    } else if (e.kind === 'num') {
+      // 飄起來的傷害數字：一開始放大再縮回，往上飄並淡出
+      const size = e.size || 12;
+      ctx.globalAlpha = Math.min(1, a * 2);
+      outlinedText(e.text, e.x, e.y - p * 22, size + (1 - Math.min(1, p * 4)) * size * 0.4, e.color);
       ctx.globalAlpha = 1;
     }
   }
@@ -2640,6 +3535,19 @@ function drawEffects() {
 
 function drawParticles() {
   for (const p of G.particles) {
+    if (p.chunk) {
+      // 石塊碎片：會旋轉的方塊，最後 0.4 秒淡出
+      ctx.globalAlpha = Math.min(1, p.life / 0.4);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.8);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(-p.size / 2, p.size * 0.15, p.size, p.size * 0.25);
+      ctx.restore();
+      continue;
+    }
     ctx.globalAlpha = Math.max(0, p.life / p.max);
     ctx.fillStyle = p.color;
     ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (0.5 + 0.5 * p.life / p.max), 0, Math.PI * 2); ctx.fill();
@@ -2647,31 +3555,40 @@ function drawParticles() {
   ctx.globalAlpha = 1;
 }
 
-// 畫面中央的大字（開場倒數、開戰、最後一分鐘）
+// 畫面中央的大字（開場倒數、開戰、最後一分鐘、勝利／落敗）
 function drawBanner() {
   let text = null;
   let scale = 1;
   let alpha = 1;
+  let b = null;
   if (G.started && G.countdown > 0) {
     text = String(Math.ceil(G.countdown));
     const f = G.countdown % 1;
     scale = 1 + f * 0.5;
     alpha = Math.min(1, f * 3 + 0.2);
   } else {
-    const b = G.effects.find(e => e.kind === 'banner');
+    b = G.effects.find(e => e.kind === 'banner');
     if (b) { text = b.text; scale = 1 + Math.max(0, b.t / b.max - 0.7) * 1.2; alpha = Math.min(1, b.t / b.max * 3); }
   }
+  // 遊戲結束：競技場變暗（落敗再加一點灰）
+  if (G.over) {
+    ctx.fillStyle = G.result === 'lose' ? 'rgba(20,24,34,0.45)' : 'rgba(10,12,24,0.3)';
+    ctx.fillRect(0, 0, W, H);
+  }
   if (!text) return;
+  // 勝負的大字用不同顏色：勝利金、落敗灰、平手藍
+  const palette = { win: ['#ffd45a', '#5a3300'], lose: ['#c9d0de', '#1d2230'], draw: ['#9cc2ff', '#13306b'] };
+  const [fill, stroke] = (b && b.result) ? palette[b.result] : palette.win;
   ctx.save();
   ctx.globalAlpha = alpha;
-  const g = ctx.createLinearGradient(0, RIVER_Y - 36, 0, RIVER_Y + 36);
+  const g = ctx.createLinearGradient(0, RIVER_Y - 40, 0, RIVER_Y + 40);
   g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(0.5, 'rgba(0,0,0,0.45)');
+  g.addColorStop(0.5, 'rgba(0,0,0,0.5)');
   g.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = g;
-  ctx.fillRect(0, RIVER_Y - 36, W, 72);
+  ctx.fillRect(0, RIVER_Y - 40, W, 80);
   const size = Math.round((text.length > 2 ? 34 : 50) * scale);
-  outlinedText(text, W / 2, RIVER_Y + 2, size, '#ffd45a', '#5a3300');
+  outlinedText(text, W / 2, RIVER_Y + 2, size, fill, stroke);
   ctx.restore();
 }
 
@@ -2695,6 +3612,12 @@ function draw() {
   drawDeployPreview();
   ctx.restore();
   ctx.drawImage(vignetteCanvas, 0, 0, W, H);
+  // 塔倒塌時整個畫面閃一下白光
+  const flash = G.effects.find(e => e.kind === 'flash');
+  if (flash) {
+    ctx.fillStyle = `rgba(255,250,235,${(flash.t / flash.max) * 0.45})`;
+    ctx.fillRect(0, 0, W, H);
+  }
   drawBanner();
 }
 
@@ -2734,8 +3657,7 @@ function renderDeckPreview() {
   const box = document.getElementById('deckPreview');
   box.innerHTML = DECK.map(id => {
     const c = CARDS[id];
-    return `<div class="mini role-${c.role}"><span class="gem"><b>${c.cost}</b></span>` +
-           `<span class="e">${c.emoji}</span><span class="n stroke">${c.name}</span></div>`;
+    return `<div class="mini role-${c.role}">${cardHTML(c)}<span class="gem"><b>${c.cost}</b></span></div>`;
   }).join('');
 }
 
