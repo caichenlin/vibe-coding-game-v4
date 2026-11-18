@@ -1418,6 +1418,7 @@ function newGame() {
     towers: makeTowers(),
     units: [],
     effects: [],        // 畫面特效（箭、爆炸、傷害數字）
+    shots: [],          // 4.4：飛行中的投射物（箭、砲彈、火球），打到才扣血
     particles: [],      // 粒子（煙塵、火花、碎石）
     shake: 0,           // 畫面震動強度
     hand: [],           // 手上 4 張
@@ -1940,13 +1941,15 @@ function moveToward(u, tx, ty, speed, dt) {
     const bx = u.lane + u.offset;             // 要走的橋
     const nearEdge = goingUp ? downEdge : upEdge;
     const farEdge = goingUp ? upEdge : downEdge;
-    if (Math.abs(u.x - bx) > 1) {
+    // 4.4：單位會互相推擠，所以在橋面寬度內（離中線 15 px 內）就算對準，不會卡在橋頭
+    const span = BRIDGE_HALF - 5;
+    if (Math.abs(u.x - bx) > span) {
       // 還沒對準橋：先走到橋頭
-      tx = bx;
+      tx = Math.min(Math.max(u.x, bx - span), bx + span);
       ty = (u.y > upEdge && u.y < downEdge) ? u.y : nearEdge;
     } else {
-      // 已經在橋上：直直走到對岸
-      tx = bx;
+      // 已經在橋上：直直走到對岸（保持目前的左右位置）
+      tx = u.x;
       ty = farEdge;
     }
   }
@@ -1972,15 +1975,113 @@ function findUnitTarget(u, reach) {
   return best;
 }
 
+// =====================================================
+// 4.4：投射物（打到才扣血）、鎖定目標、單位碰撞
+// =====================================================
+
+// 發射投射物：畫面上的箭／砲彈／火球會追著目標飛，time 秒後打到才呼叫 onHit(落點 x, 落點 y)
+function fireShot(kind, x, y, target, time, onHit) {
+  const air = target.card && target.card.air ? 10 : 0;
+  const fx = { kind, x1: x, y1: y, x2: target.x, y2: target.y - air, t: time, max: time };
+  G.effects.push(fx);
+  G.shots.push({ t: time, target, onHit, fx, lx: target.x, ly: target.y, air });
+}
+
+// 每格更新投射物：目標還活著就跟著目標移動；時間到就打下去
+function updateShots(dt) {
+  const left = [];
+  for (const s of G.shots) {
+    const tg = s.target;
+    if (!(tg.dead || tg.alive === false)) { s.lx = tg.x; s.ly = tg.y; }
+    s.fx.x2 = s.lx;
+    s.fx.y2 = s.ly - s.air;
+    s.t -= dt;
+    if (s.t <= 0) s.onHit(s.lx, s.ly);
+    else left.push(s);
+  }
+  G.shots = left;
+}
+
+// 鎖定的目標還能不能繼續打（活著、打得到、還在射程內）
+function lockedTarget(u) {
+  const t = u.lock;
+  if (!t || t.dead) return null;
+  if (u.card.buildingsOnly || u.card.bomb || u.card.healer) return null;
+  if (t.card.air && !u.card.hitsAir) return null;
+  if (dist(u, t) > u.card.range + UNIT_R) return null;
+  return t;
+}
+
+// 單位的碰撞半徑和體重（重的推得動輕的）
+const BODY = {
+  minions: [6, 1], bats: [6, 1], bomb: [7, 2], mage: [7, 2], healer: [7, 2], hog: [8, 4], tank: [10, 8],
+};
+
+// 單位碰撞：重疊的單位互相推開（地面和地面、空中和空中）；不會被推進塔、砲塔或河裡
+function resolveCollisions() {
+  const list = G.units.filter(u => !u.dead && !u.card.building);
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      const [ra, ma] = BODY[a.id] || [7, 2];
+      for (let j = i + 1; j < list.length; j++) {
+        const b = list[j];
+        if (!!a.card.air !== !!b.card.air) continue;
+        const [rb, mb] = BODY[b.id] || [7, 2];
+        let dx = b.x - a.x, dy = b.y - a.y;
+        let d = Math.hypot(dx, dy);
+        const min = ra + rb;
+        if (d >= min) continue;
+        if (d < 0.01) { dx = (i % 2 ? 1 : -1) * 0.5; dy = 0.3; d = Math.hypot(dx, dy); }   // 完全重疊時隨便往旁邊推
+        const push = (min - d) * 0.5;
+        const nx = dx / d, ny = dy / d;
+        a.x -= nx * push * mb / (ma + mb);
+        a.y -= ny * push * mb / (ma + mb);
+        b.x += nx * push * ma / (ma + mb);
+        b.y += ny * push * ma / (ma + mb);
+      }
+    }
+  }
+  for (const u of list) {
+    if (u.card.air) continue;
+    const [r] = BODY[u.id] || [7, 2];
+    // 不能站進塔裡（塔的身體半徑 22，國王塔 26）
+    for (const t of G.towers) {
+      if (!t.alive) continue;
+      const tr = (t.type === 'king' ? 26 : 22) + r;
+      const dx = u.x - t.x, dy = u.y - t.y, d = Math.hypot(dx, dy);
+      if (d < tr && d > 0.01) { u.x = t.x + dx / d * tr; u.y = t.y + dy / d * tr; }
+    }
+    // 不能站進砲塔裡
+    for (const c of G.units) {
+      if (c.dead || !c.card.building) continue;
+      const cr = CANNON_R + r;
+      const dx = u.x - c.x, dy = u.y - c.y, d = Math.hypot(dx, dy);
+      if (d < cr && d > 0.01) { u.x = c.x + dx / d * cr; u.y = c.y + dy / d * cr; }
+    }
+    // 不能被推進河裡：在河的範圍內就要待在橋上（衝鋒豬會跳河，不受限）
+    if (!u.card.jumpRiver && Math.abs(u.y - RIVER_Y) < RIVER_HALF + 2) {
+      const bx = nearestLane(u.x);
+      const span = BRIDGE_HALF - 4;
+      u.x = Math.min(Math.max(u.x, bx - span), bx + span);
+    }
+    u.x = Math.min(Math.max(u.x, 8), W - 8);
+    u.y = Math.min(Math.max(u.y, 8), H - 8);
+  }
+}
+
 // 攻擊一個敵方單位（法師有範圍傷害：目標周圍 30 內的敵方單位都受傷）
 function attackUnit(u, e) {
   u.atkAt = performance.now();   // 只給動畫用（揮武器）
   if (u.card.splash) {
-    for (const o of G.units) {
-      if (!o.dead && o.team !== u.team && dist(o, e) <= u.card.splash) damageUnit(o, u.card.dmg, false);
-    }
-    G.effects.push({ kind: 'orb', x1: u.x, y1: u.y - 6, x2: e.x, y2: e.y, t: 0.2, max: 0.2 });
-    G.effects.push({ kind: 'splash', x: e.x, y: e.y, t: 0.35, max: 0.35 });
+    // 4.4：法師的火球飛 0.2 秒，落地時才對落點周圍造成範圍傷害
+    const team = u.team, dmg = u.card.dmg, r = u.card.splash;
+    fireShot('orb', u.x, u.y - 6, e, 0.2, (x, y) => {
+      for (const o of G.units) {
+        if (!o.dead && o.team !== team && Math.hypot(o.x - x, o.y - y) <= r) damageUnit(o, dmg, false);
+      }
+      G.effects.push({ kind: 'splash', x, y, t: 0.35, max: 0.35 });
+    });
   } else {
     damageUnit(e, u.card.dmg, false);
     meleeFx(u, e.x, e.y);
@@ -2006,14 +2107,18 @@ function attackTower(u, t) {
     return;
   }
   u.hitTower = true;   // 成就「完美防守」用：這個單位打到過塔
-  damageTower(t, u.card.dmg);
   if (u.card.splash) {
-    for (const o of G.units) {
-      if (!o.dead && o.team !== u.team && dist(o, t) <= TOWER_HIT + u.card.splash) damageUnit(o, u.card.dmg, false);
-    }
-    G.effects.push({ kind: 'orb', x1: u.x, y1: u.y - 6, x2: t.x, y2: t.y, t: 0.2, max: 0.2 });
-    G.effects.push({ kind: 'splash', x: t.x, y: t.y, t: 0.35, max: 0.35 });
+    // 4.4：法師打塔也是火球落地才扣血（塔和塔邊的敵方單位）
+    const team = u.team, dmg = u.card.dmg, r = u.card.splash;
+    fireShot('orb', u.x, u.y - 6, t, 0.2, () => {
+      damageTower(t, dmg);
+      for (const o of G.units) {
+        if (!o.dead && o.team !== team && dist(o, t) <= TOWER_HIT + r) damageUnit(o, dmg, false);
+      }
+      G.effects.push({ kind: 'splash', x: t.x, y: t.y, t: 0.35, max: 0.35 });
+    });
   } else {
+    damageTower(t, u.card.dmg);
     meleeFx(u, t.x, t.y);
   }
 }
@@ -2049,14 +2154,15 @@ function updateUnit(u, dt) {
   if (u.card.building) {
     u.hp -= u.maxHp / u.card.lifetime * dt;
     if (u.hp <= 0) { u.dead = true; return; }
-    const foe = findUnitTarget(u, u.card.range);
+    const foe = lockedTarget(u) || findUnitTarget(u, u.card.range);   // 4.4：鎖定目標
+    u.lock = foe;
     if (foe) {
       u.aim = Math.atan2(foe.y - u.y, foe.x - u.x);   // 砲管轉向目標
       if (u.cd <= 0) {
-        damageUnit(foe, u.card.dmg, false);
+        const dmg = u.card.dmg;
+        fireShot('ball', u.x, u.y, foe, 0.15, () => { if (!foe.dead) damageUnit(foe, dmg, false); });   // 4.4：砲彈飛到才扣血
         u.cd = u.card.atk;
         u.recoil = performance.now();
-        G.effects.push({ kind: 'ball', x1: u.x, y1: u.y, x2: foe.x, y2: foe.y, t: 0.15, max: 0.15 });
         sfx('hit');
       }
     }
@@ -2106,7 +2212,9 @@ function updateUnit(u, dt) {
   }
 
   // --- 一般單位：射程內有敵方單位就先打單位（停下來打） ---
-  const foe = findUnitTarget(u, u.card.range);
+  // 4.4：鎖定目標：正在打的目標還活著、還在射程內就繼續打，不會換人
+  const foe = lockedTarget(u) || findUnitTarget(u, u.card.range);
+  u.lock = foe;
   if (foe) {
     if (u.cd <= 0) {
       attackUnit(u, foe);
@@ -2181,17 +2289,21 @@ function updateTower(t, dt) {
   if (!t.alive) return;
   t.cd = Math.max(0, t.cd - dt);
   if (t.cd > 0) return;
-  let best = null;
+  // 4.4：鎖定目標：上一個目標還活著、還在射程內就繼續打
+  let best = (t.lock && !t.lock.dead && dist(t, t.lock) <= t.range) ? t.lock : null;
   let bestD = Infinity;
-  for (const u of G.units) {
-    if (u.dead || u.team === t.team) continue;
-    const d = dist(t, u);
-    if (d <= t.range && d < bestD) { best = u; bestD = d; }
+  if (!best) {
+    for (const u of G.units) {
+      if (u.dead || u.team === t.team) continue;
+      const d = dist(t, u);
+      if (d <= t.range && d < bestD) { best = u; bestD = d; }
+    }
   }
+  t.lock = best;
   if (best) {
-    // 塔射出一支箭（畫面特效），傷害立刻生效
-    G.effects.push({ kind: 'arrow', x1: t.x, y1: t.y - 20, x2: best.x, y2: best.y - (best.card.air ? 10 : 0), t: 0.18, max: 0.18 });
-    damageUnit(best, t.dmg, true);
+    // 4.4：塔射出一支箭，飛 0.18 秒打到才扣血（目標先死了就打空）
+    const target = best, dmg = t.dmg;
+    fireShot('arrow', t.x, t.y - 20, target, 0.18, () => { if (!target.dead) damageUnit(target, dmg, true); });
     t.cd = t.atk;
     t.atkAt = performance.now();                       // 只給動畫用（拉弓、弩砲）
     t.aim = Math.atan2(best.y - t.y, best.x - t.x);
@@ -2679,8 +2791,10 @@ function update(dt) {
 
   expireCounters();
   updateAI(dt);
+  updateShots(dt);   // 4.4：先讓飛行中的箭、砲彈、火球打下去
   for (const u of G.units) if (!u.dead) updateUnit(u, dt);
   for (const t of G.towers) updateTower(t, dt);
+  resolveCollisions();   // 4.4：重疊的單位互相推開
 
   // 移除死掉的單位（死掉時冒一團煙）
   // 陣亡：白煙＋隊伍色光圈＋💀 往上飄＋「噗」一聲（炸彈兵自爆有自己的特效）
